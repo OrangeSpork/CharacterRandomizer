@@ -1,0 +1,20 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>bfb515cd-b249-4b65-95ba-55fca028e069</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>CharacterRandomizer</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)CharacterRandomizerCharaController.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CharacterRandomizerPlugin.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CharacterRandomizerSceneController.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CharacterRandomizerStudioGUI.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="$(MSBuildThisFileDirectory)Resources\chara_random_studio.png" />
+  </ItemGroup>
+</Project>
