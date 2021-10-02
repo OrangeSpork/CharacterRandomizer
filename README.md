@@ -8,7 +8,7 @@ Started as a personal plugin for a 'surprise me' button to swap a scene with a n
 
 **Trigger Character Replacement** : Hotkey to trigger the replacement for the selected character. Unbound by default.\
 **Default subdirectory** : If not otherwise specified pull characters from the following subdirectory. Directory is based from the female or male level. Leave empty to use those directories. Pipe delimit multiple subdirectories together.\
-**Minimum Replacement Delay** : The timer uses a Minimum + Base + Random formula. This sets the base, setting this low can result in your scene soft-locking as it continuously replaces characters, make sure you leave this long enough to load scenes before replacements start firing.
+**Minimum Replacement Delay** : The timer uses a Minimum + Base + Random formula. This sets the minimum, setting this low can result in your scene soft-locking as it continuously replaces characters, make sure you leave this long enough to load scenes before replacements start firing.
 
 ## Character Settings (Configure using the toolbar icon - the dice)
 
