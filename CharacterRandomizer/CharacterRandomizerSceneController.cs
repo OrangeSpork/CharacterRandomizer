@@ -14,13 +14,16 @@ namespace CharacterRandomizer
         {
             if (operation == SceneOperationKind.Load)
             {
-                CharacterRandomizerPlugin.CurrentCharacters.Clear();
+                CharacterRandomizerPlugin.CurrentMaleCharacters.Clear();
+                CharacterRandomizerPlugin.CurrentFemaleCharacters.Clear();
+
                 CharacterRandomizerPlugin.NextReplacementTime = float.MaxValue;
                 // Clear the loaded flags
                 CharacterApi.ControllerRegistration controllerRegistration = CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID);
                 foreach (CharacterRandomizerCharaController charaController in controllerRegistration.Instances)
                 {
-                    charaController.ScheduleNextReplacement(true);
+                    if (charaController.Running)
+                        charaController.ScheduleNextReplacement(true);
                 }
             }
         }

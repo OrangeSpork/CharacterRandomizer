@@ -23,8 +23,8 @@ namespace CharacterRandomizer
         private bool loaded = false;
         public bool Loaded
         {
-            get { return loaded;  }
-            set { loaded = value;  }
+            get { return loaded; }
+            set { loaded = value; }
         }
 
         // Settings
@@ -45,7 +45,7 @@ namespace CharacterRandomizer
         public ReplacementMode CharReplacementMode
         {
             get { return charReplacementMode; }
-            set { charReplacementMode = value;  }
+            set { charReplacementMode = value; }
         }
 
         private int baseDelaySeconds = 60;
@@ -59,12 +59,12 @@ namespace CharacterRandomizer
         public int DelayVarianceRange
         {
             get { return delayVarianceRange; }
-            set { delayVarianceRange = value;  }
+            set { delayVarianceRange = value; }
         }
 
         private string subdirectory = "";
         public string Subdirectory
-        { 
+        {
             get { return subdirectory; }
             set { subdirectory = value; }
         }
@@ -118,6 +118,13 @@ namespace CharacterRandomizer
             set { preserveOutfit = value; }
         }
 
+        private RotationMode rotation = 0;
+        public RotationMode Rotation
+        {
+            get { return rotation; }
+            set { rotation = value; }
+        }
+
         // vars
         private float lastReplacementTime = 0f;
         private float nextReplacementTime = 0f;
@@ -126,6 +133,21 @@ namespace CharacterRandomizer
 
         private ManualLogSource log => CharacterRandomizerPlugin.Instance.Log;
         private static MethodInfo onCoordinateBeingSavedMethod = AccessTools.Method(typeof(CharacterApi), "OnCoordinateBeingSaved");
+
+        public int Position
+        {
+            get
+            {
+                try
+                {
+                    return int.Parse(ChaControl.gameObject.name.Substring(ChaControl.gameObject.name.Length - 3));
+                }
+                catch
+                {
+                    return 0;
+                }
+            }
+        }
 
         protected override void Start()
         {
@@ -148,13 +170,17 @@ namespace CharacterRandomizer
 
         protected override void OnDestroy()
         {
-            CharacterRandomizerPlugin.CurrentCharacters.Remove(lastReplacementFile);
+            ClearCurrentCharacterRegistry();
+
             base.OnDestroy();            
         }
 
         protected override void Update()
         {
             base.Update();
+
+            UpdateCurrentCharacterRegistry(lastReplacementFile);            
+
             if (this.running &&  !useSyncedTime && Time.time > nextReplacementTime)
             {
                 // Time to do replacement
@@ -181,15 +207,72 @@ namespace CharacterRandomizer
 
         public void ReplaceCharacter()
         {
-            StartCoroutine(DoReplaceCharacter());
+            ReplaceCharacter(DetermineRotationCharacter());
         }
 
-        public IEnumerator DoReplaceCharacter()
-        { 
+        public void ReplaceCharacter(CharacterRandomizerPlugin.ChaFileInfo replacementChaInfo)
+        {
+            StartCoroutine(DoReplaceCharacter(replacementChaInfo));
+        }
 
-            CharacterRandomizerPlugin.ChaFileInfo replacementChaInfo = PickReplacementCharacter();
+        public CharacterRandomizerPlugin.ChaFileInfo DetermineRotationCharacter()
+        {
+            if (Rotation == RotationMode.NONE || !UseSyncedTime)
+                return new CharacterRandomizerPlugin.ChaFileInfo();
+            else
+            {
+                if (Rotation == RotationMode.FWD)
+                {
+                    int fromPosition = Position;
+                    while (fromPosition > 0)
+                    {
+                        fromPosition--;
+                        
+                        if ((ChaControl.sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters : CharacterRandomizerPlugin.CurrentFemaleCharacters).TryGetValue(fromPosition, out string fileName) && ControllerForPosition(fromPosition, ChaControl.sex) != null && ControllerForPosition(fromPosition, ChaControl.sex).UseSyncedTime)
+                        {
 #if DEBUG
-            log.LogInfo($"Replacing: {ChaControl.fileParam.fullname}\nLast File:{lastReplacementFile}\nPicked Replacement: {replacementChaInfo}");
+                            log.LogInfo($"Rotating {Position} to {fromPosition} with {fileName}");
+#endif
+
+                            return new CharacterRandomizerPlugin.ChaFileInfo(fileName, null, DateTime.Now);
+                        }
+                    }
+                }
+                else
+                {
+                    int maxPosition = 0;
+                    foreach (int maxPositionCand in ChaControl.sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters.Keys : CharacterRandomizerPlugin.CurrentFemaleCharacters.Keys)
+                    {
+                        if (maxPositionCand > maxPosition)
+                            maxPosition = maxPositionCand;
+                    }
+                    int fromPosition = Position;
+                    while (fromPosition <= maxPosition)
+                    {
+                        fromPosition++;
+                        if ((ChaControl.sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters : CharacterRandomizerPlugin.CurrentFemaleCharacters).TryGetValue(fromPosition, out string fileName) && ControllerForPosition(fromPosition, ChaControl.sex) != null && ControllerForPosition(fromPosition, ChaControl.sex).UseSyncedTime)
+                        {
+#if DEBUG
+                            log.LogInfo($"Rotating {Position} to {fromPosition} with {fileName}");
+#endif
+                            return new CharacterRandomizerPlugin.ChaFileInfo(fileName, null, DateTime.Now);
+                        }
+                    }
+                }
+#if DEBUG
+                log.LogInfo($"No Rotation Available");
+#endif
+
+                return new CharacterRandomizerPlugin.ChaFileInfo();
+            }
+        }
+
+        public IEnumerator DoReplaceCharacter(CharacterRandomizerPlugin.ChaFileInfo replacementChaInfo)
+        { 
+            if (replacementChaInfo.fileName == null)
+                replacementChaInfo = PickReplacementCharacter();
+#if DEBUG
+            log.LogInfo($"Replacing {Position}: {ChaControl.fileParam.fullname}\nLast File:{lastReplacementFile}\nPicked Replacement: {replacementChaInfo}");
 #endif
             if (string.IsNullOrEmpty(replacementChaInfo.fileName))
                 yield break;
@@ -220,8 +303,6 @@ namespace CharacterRandomizer
             int neckState = ChaControl.neckLookCtrl.ptnNo;
             int gazeState = ChaControl.eyeLookCtrl.ptnNo;
 
-            CharacterRandomizerPlugin.CurrentCharacters.Remove(lastReplacementFile);
-
             string fileName = "";
             if (preserveOutfit)
             {
@@ -248,7 +329,10 @@ namespace CharacterRandomizer
             ChaControl.GetOCIChar().ChangeChara(replacementChaInfo.fileName);
             CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).MaintainState = false;
 
-            CharacterRandomizerPlugin.CurrentCharacters.Add(Path.GetFileName(replacementChaInfo.fileName));            
+
+            UpdateCurrentCharacterRegistry(replacementChaInfo.fileName);
+            lastReplacementTime = Time.time;
+            lastReplacementFile = replacementChaInfo.fileName;
 
             if (preserveOutfit)
             {
@@ -267,9 +351,6 @@ namespace CharacterRandomizer
             yield return StartCoroutine(TickleClothesState());
             ChaControl.GetOCIChar().ChangeLookNeckPtn(neckState);
             ChaControl.GetOCIChar().ChangeLookEyesPtn(gazeState);
-
-            lastReplacementTime = Time.time;
-            lastReplacementFile = replacementChaInfo.fileName;
 
 #if DEBUG
             log.LogInfo($"Setting Last File {lastReplacementFile}");
@@ -396,7 +477,7 @@ namespace CharacterRandomizer
                 {
                     files.RemoveAll(fi =>
                     {
-                        return CharacterRandomizerPlugin.CurrentCharacters.Contains(fi.fileName);
+                        return CheckCurrentCharacterRegistry(fi.fileName);                        
                     });
                 }
 
@@ -506,6 +587,73 @@ namespace CharacterRandomizer
             }
         }
 
+        private bool CheckCurrentCharacterRegistry(string fileName)
+        {
+            if (ChaControl.sex == 0)
+            {
+                return CharacterRandomizerPlugin.CurrentMaleCharacters.Values.Contains(fileName);
+            }
+            else
+            {
+                return CharacterRandomizerPlugin.CurrentFemaleCharacters.Values.Contains(fileName);
+            }
+        }
+
+        private void UpdateCurrentCharacterRegistry(string fileName)
+        {
+            if (ChaControl.sex == 0)
+            {
+                if (!CharacterRandomizerPlugin.CurrentMaleCharacters.TryGetValue(Position, out string positionName) || positionName != lastReplacementFile)
+                {
+                    CharacterRandomizerPlugin.CurrentMaleCharacters[Position] = lastReplacementFile;
+                    LogCurrentCharacterRegistry();
+                }
+            }
+            else
+            {
+                if (!CharacterRandomizerPlugin.CurrentFemaleCharacters.TryGetValue(Position, out string positionName) || positionName != lastReplacementFile)
+                {
+                    CharacterRandomizerPlugin.CurrentFemaleCharacters[Position] = lastReplacementFile;
+                    LogCurrentCharacterRegistry();
+                }
+            }
+        }
+
+        private void ClearCurrentCharacterRegistry()
+        {
+            if (ChaControl.sex == 0)
+            {
+                CharacterRandomizerPlugin.CurrentMaleCharacters.Remove(Position);
+            }
+            else
+            {
+                CharacterRandomizerPlugin.CurrentFemaleCharacters.Remove(Position);
+            }
+            LogCurrentCharacterRegistry();
+        }
+
+        private void LogCurrentCharacterRegistry()
+        {
+#if DEBUG
+            log.LogInfo($"Current Male Characters:");
+            foreach (int position in CharacterRandomizerPlugin.CurrentMaleCharacters.Keys)
+                log.LogInfo($"{position}: {ControllerForPosition(position, 0)?.ChaControl.fileParam.fullname} {CharacterRandomizerPlugin.CurrentMaleCharacters[position]}");
+            log.LogInfo($"Current Female Characters:");
+            foreach (int position in CharacterRandomizerPlugin.CurrentFemaleCharacters.Keys)
+                log.LogInfo($"{position}: {ControllerForPosition(position, 1)?.ChaControl.fileParam.fullname} {CharacterRandomizerPlugin.CurrentFemaleCharacters[position]}");
+#endif
+        }
+
+        private CharacterRandomizerCharaController ControllerForPosition(int position, int sex)
+        {
+            foreach (CharacterRandomizerCharaController controller in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
+            {
+                if (controller.Position == position && controller.ChaControl.sex == sex)
+                    return controller;
+            }
+            return null;
+        }
+
         protected override void OnReload(GameMode currentGameMode, bool maintainState)
         {
 #if DEBUG
@@ -538,6 +686,7 @@ namespace CharacterRandomizer
                 if (pluginData.data.TryGetValue("useSyncedTime", out var useSyncedTimeData)) { useSyncedTime = (bool)useSyncedTimeData; };
                 if (pluginData.data.TryGetValue("preserveOutfit", out var preserveOutfitData)) { preserveOutfit = (bool)preserveOutfitData; };
                 if (pluginData.data.TryGetValue("outfitFile", out var outfitFileData)) { outfitFile = (string)outfitFileData; };
+                if (pluginData.data.TryGetValue("rotation", out var rotationData)) { rotation = (RotationMode)rotationData; };
             }
             else
             {
@@ -579,6 +728,7 @@ namespace CharacterRandomizer
             pluginData.data["useSyncedTime"] = useSyncedTime;
             pluginData.data["preserveOutfit"] = preserveOutfit;
             pluginData.data["outfitFile"] = outfitFile;
+            pluginData.data["rotation"] = rotation;
 
 #if DEBUG
             log.LogInfo($"Saving Plugin Data...");
@@ -587,6 +737,12 @@ namespace CharacterRandomizer
             SetExtendedData(pluginData);
         }
 
+        public enum RotationMode
+        { 
+            NONE = 0,
+            FWD = 1,
+            REV = 2
+        }
 
 
         public enum ReplacementMode

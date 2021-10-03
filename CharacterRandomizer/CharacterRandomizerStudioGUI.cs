@@ -15,7 +15,7 @@ namespace CharacterRandomizer
     {
         private static ManualLogSource Log => CharacterRandomizerPlugin.Instance.Log;
 
-        private static Rect windowRect = new Rect(120, 220, 600, 575);
+        private static Rect windowRect = new Rect(120, 220, 600, 625);
         private static readonly GUILayoutOption expandLayoutOption = GUILayout.ExpandWidth(true);
 
         private static GUIStyle labelStyle;
@@ -193,9 +193,13 @@ namespace CharacterRandomizer
 
 
                     GUILayout.Label("Random is random, Cyclic cycles characters in the specified order.");
+                    GUILayout.Label("Rotation swaps slot 1. Next cycle swaps 1 to 2 and replaces 1 again, etc. Or from last slot forward.");
                     GUILayout.Space(3);
                     controller.CharReplacementMode = (CharacterRandomizerCharaController.ReplacementMode)GUILayout.SelectionGrid((int)controller.CharReplacementMode, new string[] { "Random", "Cyclic - Last Update", "Cyclic - Last Update Desc", "Cyclic - File Name", "Cyclic - File Name Desc", "Cyclic - Chara Name", "Cyclic - Chara Name Desc" }, 3);
                     GUILayout.Space(3);
+                    controller.Rotation = (CharacterRandomizerCharaController.RotationMode)GUILayout.SelectionGrid((int)controller.Rotation, new string[] { "None", "Forward", "Reverse" }, 3);
+                    GUILayout.Space(3);
+
 
                     GUILayout.Label($"Replacement Time is {CharacterRandomizerPlugin.MinimumDelay.Value} seconds + Base + Random seconds");
                     GUILayout.BeginHorizontal();
