@@ -28,7 +28,7 @@ namespace CharacterRandomizer
 
         public const string GUID = "orange.spork.characterrandomizer";
         public const string PluginName = "Character Randomizer";
-        public const string Version = "1.1.1";
+        public const string Version = "1.1.2";
 
         public static CharacterRandomizerPlugin Instance { get; set; }
 
