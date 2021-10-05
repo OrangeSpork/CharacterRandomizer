@@ -77,6 +77,7 @@ namespace CharacterRandomizer
             var harmony = new Harmony(GUID);
 
             harmony.Patch(AccessTools.Method(typeof(ChaFileControl), "ConvertCharaFilePath"), null, new HarmonyMethod(typeof(CharacterRandomizerPlugin), "ConvertCharaFilePathMonitor"));
+            harmony.Patch(AccessTools.Method(typeof(AddObjectFolder), "Load", new Type[] { typeof(OIFolderInfo), typeof(ObjectCtrlInfo), typeof(TreeNodeObject), typeof(bool), typeof(int) }), null, new HarmonyMethod(typeof(CharacterRandomizerPlugin), "AddFolderMonitor"));
          
 #if DEBUG
             Log.LogInfo("Character Randomizer Loaded.");
@@ -113,7 +114,7 @@ namespace CharacterRandomizer
             while (this.enabled)
             {
                 ScanForFolderFlags();
-                yield return new WaitForSeconds(1);
+                yield return new WaitForSeconds(10);
             }
         }
 
@@ -135,8 +136,15 @@ namespace CharacterRandomizer
 
         private void CheckForRequestedReplacementsViaFolder()
         {
+            bool rescan = false;
             foreach (OCIFolder folder in FolderRequestFlags)
             {
+                if (folder == null || folder.objectItem == null)
+                {
+                    rescan = true;
+                    continue;
+                }
+
                 if (folder.name != null && folder.name.ToUpper().StartsWith("-RNG") && folder.treeNodeObject.visible)
                 {
                     if (folder.name.EndsWith("ALL"))
@@ -178,6 +186,9 @@ namespace CharacterRandomizer
                     folder.treeNodeObject.SetVisible(false);
                 }
             }
+
+            if (rescan)
+                ScanForFolderFlags();
         }
 
         public void Start()
@@ -258,6 +269,10 @@ namespace CharacterRandomizer
 #endif
         }
 
+        public static void AddFolderMonitor()
+        {
+            CharacterRandomizerPlugin.Instance.ScanForFolderFlags();
+        }
         public static CharacterRandomizerCharaController ControllerForPosition(int position, int sex)
         {
             foreach (CharacterRandomizerCharaController controller in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
