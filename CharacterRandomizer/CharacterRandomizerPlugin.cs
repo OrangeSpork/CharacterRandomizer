@@ -11,6 +11,7 @@ using KKAPI.Utilities;
 using Manager;
 using Studio;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -27,7 +28,7 @@ namespace CharacterRandomizer
 
         public const string GUID = "orange.spork.characterrandomizer";
         public const string PluginName = "Character Randomizer";
-        public const string Version = "1.1.0";
+        public const string Version = "1.1.1";
 
         public static CharacterRandomizerPlugin Instance { get; set; }
 
@@ -54,7 +55,14 @@ namespace CharacterRandomizer
 
         public static float LastReplacementTime { get; set; }
         public static float NextReplacementTime { get; set; } = float.MaxValue;
-    
+        public static string LastLoadedFile { get; set; }
+        public static void ConvertCharaFilePathMonitor(string __result)
+        {
+            LastLoadedFile = __result;
+        }
+
+        public static List<OCIFolder> FolderRequestFlags { get; set; } = new List<OCIFolder>();
+
         public CharacterRandomizerPlugin()
         {
             if (Instance != null)
@@ -67,6 +75,8 @@ namespace CharacterRandomizer
             ReplaceKey = Config.Bind("Hotkeys", "Trigger Character Replacement", new KeyboardShortcut(KeyCode.None), new ConfigDescription("Triggers Character Replacement Manually Using Current Options."));
 
             var harmony = new Harmony(GUID);
+
+            harmony.Patch(AccessTools.Method(typeof(ChaFileControl), "ConvertCharaFilePath"), null, new HarmonyMethod(typeof(CharacterRandomizerPlugin), "ConvertCharaFilePathMonitor"));
          
 #if DEBUG
             Log.LogInfo("Character Randomizer Loaded.");
@@ -86,6 +96,88 @@ namespace CharacterRandomizer
                     }
                 }
             }
+
+            CheckForRequestedReplacementsViaFolder();
+
+        }
+
+        public void OnEnable()
+        {
+            StartCoroutine(ScanForFolderFlagsCo());
+        }
+
+        
+        private IEnumerator ScanForFolderFlagsCo()
+        {
+            yield return new WaitUntil(() => Studio.Studio.Instance != null && Studio.Studio.Instance.dicObjectCtrl != null);
+            while (this.enabled)
+            {
+                ScanForFolderFlags();
+                yield return new WaitForSeconds(1);
+            }
+        }
+
+        public void ScanForFolderFlags()
+        {
+            FolderRequestFlags.Clear();
+            foreach (ObjectCtrlInfo ctrlInfo in Studio.Studio.Instance.dicObjectCtrl.Values)
+            {
+                if (ctrlInfo.GetType() == typeof(OCIFolder))
+                {
+                    OCIFolder folder = (OCIFolder)ctrlInfo;
+                    if (folder.name != null && folder.name.ToUpper().StartsWith("-RNG") && ctrlInfo.treeNodeObject.visible)
+                    {
+                        FolderRequestFlags.Add(folder);
+                    }
+                }
+            }
+        }
+
+        private void CheckForRequestedReplacementsViaFolder()
+        {
+            foreach (OCIFolder folder in FolderRequestFlags)
+            {
+                if (folder.name != null && folder.name.ToUpper().StartsWith("-RNG") && folder.treeNodeObject.visible)
+                {
+                    if (folder.name.EndsWith("ALL"))
+                    {
+    #if DEBUG
+                        Log.LogInfo($"Replace ALL via folder requested.");
+    #endif
+                        CharacterRandomizerPlugin.ReplaceAll();
+                    }
+                    else
+                    {
+                        try
+                        {
+                            string charRequest = folder.name.Substring(folder.name.LastIndexOf(":") + 1);
+                            char sex = charRequest.ToUpper()[0];
+                            int index = int.Parse(charRequest.Substring(1));
+
+    #if DEBUG
+                            Log.LogInfo($"Replace {sex}:{index} via folder requested.");
+    #endif
+
+                            foreach (CharacterRandomizerCharaController randomizer in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
+                            {
+                                if (randomizer.ChaControl.sex == 0 && sex == 'M' && randomizer.Position == index)
+                                {
+                                    randomizer.ReplaceCharacter();
+                                }
+                                else if (randomizer.ChaControl.sex == 1 && sex == 'F' && randomizer.Position == index)
+                                {
+                                    randomizer.ReplaceCharacter();
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            Log.LogWarning($"Malformed Character Randomizer Folder Request: {folder.name}");
+                        }
+                    }
+                    folder.treeNodeObject.SetVisible(false);
+                }
+            }
         }
 
         public void Start()
@@ -103,6 +195,15 @@ namespace CharacterRandomizer
             StudioGUIToolbarToggle = KKAPI.Studio.UI.CustomToolbarButtons.AddLeftToolbarToggle(gIconTex, false, active => {
                 CharacterRandomizerStudioGUI.Instance.enabled = active;
             }); 
+        }
+
+        public static void ReplaceAll()
+        {
+            foreach (CharacterRandomizerCharaController randomizer in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
+            {
+                if (randomizer.UseSyncedTime)
+                    randomizer.ReplaceCharacter();
+            }
         }
 
         public void RefreshLists()
@@ -143,6 +244,28 @@ namespace CharacterRandomizer
             });
             ExtensibleSaveFormat.ExtendedSave.LoadEventsEnabled = true;
             return chaList;
+        }
+
+        public static void LogCurrentCharacterRegistry()
+        {
+#if DEBUG
+            Instance.Log.LogInfo($"Current Male Characters:");
+            foreach (int position in CharacterRandomizerPlugin.CurrentMaleCharacters.Keys)
+                Instance.Log.LogInfo($"{position}: {ControllerForPosition(position, 0)?.ChaControl.fileParam.fullname} {CharacterRandomizerPlugin.CurrentMaleCharacters[position]}");
+            Instance.Log.LogInfo($"Current Female Characters:");
+            foreach (int position in CharacterRandomizerPlugin.CurrentFemaleCharacters.Keys)
+                Instance.Log.LogInfo($"{position}: {ControllerForPosition(position, 1)?.ChaControl.fileParam.fullname} {CharacterRandomizerPlugin.CurrentFemaleCharacters[position]}");
+#endif
+        }
+
+        public static CharacterRandomizerCharaController ControllerForPosition(int position, int sex)
+        {
+            foreach (CharacterRandomizerCharaController controller in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
+            {
+                if (controller.Position == position && controller.ChaControl.sex == sex)
+                    return controller;
+            }
+            return null;
         }
 
         public struct ChaFileInfo

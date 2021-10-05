@@ -259,11 +259,7 @@ namespace CharacterRandomizer
                     GUILayout.Space(5);
                     if (GUILayout.Button("Replace All Sync'd"))
                     {
-                        foreach (CharacterRandomizerCharaController randomizer in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
-                        {
-                            if (randomizer.UseSyncedTime)
-                                randomizer.ReplaceCharacter();
-                        }
+                        CharacterRandomizerPlugin.ReplaceAll();
                     }
 
                     GUILayout.EndHorizontal();
@@ -274,11 +270,7 @@ namespace CharacterRandomizer
                     GUILayout.FlexibleSpace();
                     if (GUILayout.Button("Replace All Sync'd"))
                     {
-                        foreach (CharacterRandomizerCharaController randomizer in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
-                        {
-                            if (randomizer.UseSyncedTime)
-                                randomizer.ReplaceCharacter();
-                        }
+                        CharacterRandomizerPlugin.ReplaceAll();
                     }
                     GUILayout.Space(20);
                 }

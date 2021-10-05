@@ -1,16 +1,20 @@
-﻿using BepInEx.Logging;
+﻿using AIChara;
+using BepInEx.Logging;
 using ExtensibleSaveFormat;
 using HarmonyLib;
 using KKAPI;
 using KKAPI.Chara;
 using KKAPI.Studio;
 using KKAPI.Studio.SaveLoad;
+using Manager;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEngine;
 
@@ -177,9 +181,7 @@ namespace CharacterRandomizer
 
         protected override void Update()
         {
-            base.Update();
-
-            UpdateCurrentCharacterRegistry(lastReplacementFile);            
+            base.Update(); 
 
             if (this.running &&  !useSyncedTime && Time.time > nextReplacementTime)
             {
@@ -228,7 +230,7 @@ namespace CharacterRandomizer
                     {
                         fromPosition--;
                         
-                        if ((ChaControl.sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters : CharacterRandomizerPlugin.CurrentFemaleCharacters).TryGetValue(fromPosition, out string fileName) && ControllerForPosition(fromPosition, ChaControl.sex) != null && ControllerForPosition(fromPosition, ChaControl.sex).UseSyncedTime)
+                        if ((ChaControl.sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters : CharacterRandomizerPlugin.CurrentFemaleCharacters).TryGetValue(fromPosition, out string fileName) && CharacterRandomizerPlugin.ControllerForPosition(fromPosition, ChaControl.sex) != null && CharacterRandomizerPlugin.ControllerForPosition(fromPosition, ChaControl.sex).UseSyncedTime)
                         {
 #if DEBUG
                             log.LogInfo($"Rotating {Position} to {fromPosition} with {fileName}");
@@ -250,7 +252,7 @@ namespace CharacterRandomizer
                     while (fromPosition <= maxPosition)
                     {
                         fromPosition++;
-                        if ((ChaControl.sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters : CharacterRandomizerPlugin.CurrentFemaleCharacters).TryGetValue(fromPosition, out string fileName) && ControllerForPosition(fromPosition, ChaControl.sex) != null && ControllerForPosition(fromPosition, ChaControl.sex).UseSyncedTime)
+                        if ((ChaControl.sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters : CharacterRandomizerPlugin.CurrentFemaleCharacters).TryGetValue(fromPosition, out string fileName) && CharacterRandomizerPlugin.ControllerForPosition(fromPosition, ChaControl.sex) != null && CharacterRandomizerPlugin.ControllerForPosition(fromPosition, ChaControl.sex).UseSyncedTime)
                         {
 #if DEBUG
                             log.LogInfo($"Rotating {Position} to {fromPosition} with {fileName}");
@@ -291,7 +293,7 @@ namespace CharacterRandomizer
                     ChaControl.SetAccessoryState(i, true);
                     i++;
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
 #if DEBUG
                     log.LogInfo($"Last Accessory Index {i}");
@@ -307,7 +309,7 @@ namespace CharacterRandomizer
             if (preserveOutfit)
             {
                 fileName = ChaControl.gameObject.GetInstanceID() + "-randomizer.png";
-                ChaControl.nowCoordinate.SaveFile(Path.Combine(UserData.Path, "coordinate", (ChaControl.sex == 0 ? "male" : "female"), fileName), 0);
+                ChaControl.nowCoordinate.SaveFile(Path.Combine(UserData.Path, "coordinate", (ChaControl.sex == 0 ? "male" : "female"), fileName), (int)Singleton<GameSystem>.Instance.language);
 
                 CharaCustomFunctionController[] controllers = ChaControl.gameObject.GetComponents<CharaCustomFunctionController>();
 
@@ -603,18 +605,18 @@ namespace CharacterRandomizer
         {
             if (ChaControl.sex == 0)
             {
-                if (!CharacterRandomizerPlugin.CurrentMaleCharacters.TryGetValue(Position, out string positionName) || positionName != lastReplacementFile)
+                if (!CharacterRandomizerPlugin.CurrentMaleCharacters.TryGetValue(Position, out string positionName) || positionName != fileName)
                 {
-                    CharacterRandomizerPlugin.CurrentMaleCharacters[Position] = lastReplacementFile;
-                    LogCurrentCharacterRegistry();
+                    CharacterRandomizerPlugin.CurrentMaleCharacters[Position] = fileName;
+                    CharacterRandomizerPlugin.LogCurrentCharacterRegistry();
                 }
             }
             else
             {
-                if (!CharacterRandomizerPlugin.CurrentFemaleCharacters.TryGetValue(Position, out string positionName) || positionName != lastReplacementFile)
+                if (!CharacterRandomizerPlugin.CurrentFemaleCharacters.TryGetValue(Position, out string positionName) || positionName != fileName)
                 {
-                    CharacterRandomizerPlugin.CurrentFemaleCharacters[Position] = lastReplacementFile;
-                    LogCurrentCharacterRegistry();
+                    CharacterRandomizerPlugin.CurrentFemaleCharacters[Position] = fileName;
+                    CharacterRandomizerPlugin.LogCurrentCharacterRegistry();
                 }
             }
         }
@@ -629,43 +631,46 @@ namespace CharacterRandomizer
             {
                 CharacterRandomizerPlugin.CurrentFemaleCharacters.Remove(Position);
             }
-            LogCurrentCharacterRegistry();
-        }
-
-        private void LogCurrentCharacterRegistry()
-        {
-#if DEBUG
-            log.LogInfo($"Current Male Characters:");
-            foreach (int position in CharacterRandomizerPlugin.CurrentMaleCharacters.Keys)
-                log.LogInfo($"{position}: {ControllerForPosition(position, 0)?.ChaControl.fileParam.fullname} {CharacterRandomizerPlugin.CurrentMaleCharacters[position]}");
-            log.LogInfo($"Current Female Characters:");
-            foreach (int position in CharacterRandomizerPlugin.CurrentFemaleCharacters.Keys)
-                log.LogInfo($"{position}: {ControllerForPosition(position, 1)?.ChaControl.fileParam.fullname} {CharacterRandomizerPlugin.CurrentFemaleCharacters[position]}");
-#endif
-        }
-
-        private CharacterRandomizerCharaController ControllerForPosition(int position, int sex)
-        {
-            foreach (CharacterRandomizerCharaController controller in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
-            {
-                if (controller.Position == position && controller.ChaControl.sex == sex)
-                    return controller;
-            }
-            return null;
-        }
+            CharacterRandomizerPlugin.LogCurrentCharacterRegistry();
+        }       
 
         protected override void OnReload(GameMode currentGameMode, bool maintainState)
         {
 #if DEBUG
-            log.LogInfo($"Reloading Character {ChaControl.fileParam.fullname} Scene Load: {StudioSaveLoadApi.LoadInProgress} Scene Import: {StudioSaveLoadApi.ImportInProgress}");
+            log.LogInfo($"Reloading Character {ChaControl.fileParam.fullname} {ChaControl.chaFile.charaFileName} Last Loaded: {CharacterRandomizerPlugin.LastLoadedFile} Scene Load: {StudioSaveLoadApi.LoadInProgress} Scene Import: {StudioSaveLoadApi.ImportInProgress} Loaded: {Loaded} MS: {maintainState}");
 #endif
 
             if (StudioSaveLoadApi.LoadInProgress && Loaded)
                 Loaded = false;
 
-            if (maintainState || Loaded)
+            if (maintainState)
                 return;
-            
+
+
+            string loadedFile = "";
+
+            if (Path.GetFileName(CharacterRandomizerPlugin.LastLoadedFile) == ChaControl.chaFile.charaFileName)
+                loadedFile = CharacterRandomizerPlugin.LastLoadedFile;
+            else
+            {
+                // Store loaded character information
+                if (ChaControl.chaFile.charaFileName != null && ChaControl.chaFile.charaFileName.Length > 0)
+                {
+                    FileInfo[] files = CharacterRandomizerPlugin.FemaleBaseDir.GetFiles(ChaControl.chaFile.charaFileName, SearchOption.AllDirectories);
+                    if (files.Length > 0)
+                        loadedFile = files[0].FullName;
+                    else
+                        log.LogWarning($"Unable to identify loaded character file: {ChaControl.chaFile.charaFileName}");
+                }
+            }
+#if DEBUG
+            log.LogInfo($"Registering Loaded Character {loadedFile}");
+#endif
+            UpdateCurrentCharacterRegistry(loadedFile);
+            lastReplacementFile = loadedFile;
+
+            if (Loaded)
+                return;
 
             PluginData pluginData = GetExtendedData();
             if (pluginData != null && pluginData.data != null)
@@ -755,5 +760,7 @@ namespace CharacterRandomizer
             CYCLIC_CHARA_NAME_ASC = 5,
             CYCLIC_CHARA_NAME_DESC = 6
         }
+
+        private static MethodInfo chaFileSaveFile = AccessTools.Method(typeof(ChaFile), "SaveFile", new Type[] { typeof(BinaryWriter), typeof(bool), typeof(int)});
     }
 }
