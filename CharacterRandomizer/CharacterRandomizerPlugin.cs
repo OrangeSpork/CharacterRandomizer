@@ -28,7 +28,7 @@ namespace CharacterRandomizer
 
         public const string GUID = "orange.spork.characterrandomizer";
         public const string PluginName = "Character Randomizer";
-        public const string Version = "1.1.2";
+        public const string Version = "1.1.3";
 
         public static CharacterRandomizerPlugin Instance { get; set; }
 
@@ -49,7 +49,9 @@ namespace CharacterRandomizer
         public static List<ChaFileInfo> MaleCharaList { get; set; }
 
         public static Dictionary<int, string> CurrentFemaleCharacters { get; set; } = new Dictionary<int, string>();
-        public static Dictionary<int, string> CurrentMaleCharacters { get; set; } = new Dictionary<int, string>();        
+        public static Dictionary<int, string> RotatedFemaleCharacters { get; set; } = new Dictionary<int, string>();
+        public static Dictionary<int, string> CurrentMaleCharacters { get; set; } = new Dictionary<int, string>();
+        public static Dictionary<int, string> RotatedMaleCharacters { get; set; } = new Dictionary<int, string>();
 
         private static MethodInfo loadFileMethod = AccessTools.Method(typeof(ChaFile), "LoadFile", new Type[] { typeof(string), typeof(int), typeof(bool), typeof(bool) });
 
@@ -210,10 +212,107 @@ namespace CharacterRandomizer
 
         public static void ReplaceAll()
         {
+            RotatedFemaleCharacters.Clear();
+            CharacterRandomizerCharaController.RotationMode femaleRotationMode = RotationModeForSex(1);
+            if (femaleRotationMode != CharacterRandomizerCharaController.RotationMode.NONE)
+                CalculateRotations(femaleRotationMode, 1);
+
+            RotatedMaleCharacters.Clear();
+            CharacterRandomizerCharaController.RotationMode maleRotationMode = RotationModeForSex(0);
+            if (maleRotationMode != CharacterRandomizerCharaController.RotationMode.NONE)
+                CalculateRotations(maleRotationMode, 0);
+
+#if DEBUG
+            Instance.Log.LogInfo($"Rotation Calculation:");
+            LogCurrentCharacterRegistry();
+            LogRotationCharacterRegistry();
+#endif
+
             foreach (CharacterRandomizerCharaController randomizer in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
             {
                 if (randomizer.UseSyncedTime)
                     randomizer.ReplaceCharacter();
+            }
+            
+        }
+
+        private static CharacterRandomizerCharaController.RotationMode RotationModeForSex(int sex)
+        {
+            foreach (CharacterRandomizerCharaController controller in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
+            {
+                if (controller.ChaControl.sex == sex)
+                    return controller.Rotation;
+            }
+            return CharacterRandomizerCharaController.RotationMode.NONE;
+        }
+
+        private static void CalculateRotations(CharacterRandomizerCharaController.RotationMode rotationMode, int sex)
+        {
+            int maxPosition = 0;
+            foreach (int maxPositionCand in sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters.Keys : CharacterRandomizerPlugin.CurrentFemaleCharacters.Keys)
+            {
+                if (maxPositionCand > maxPosition)
+                    maxPosition = maxPositionCand;
+            }
+            if (rotationMode == CharacterRandomizerCharaController.RotationMode.FWD || rotationMode == CharacterRandomizerCharaController.RotationMode.WRAP_FWD)
+            {
+                foreach (int position in sex == 0 ? CurrentMaleCharacters.Keys : CurrentFemaleCharacters.Keys)
+                {
+                    if (!ControllerForPosition(position, sex).UseSyncedTime)
+                        continue;
+
+                    bool found = false;
+                    int newPosition = position + 1;
+                    while (newPosition <= maxPosition)
+                    {
+                        if ((sex == 0 ? CurrentMaleCharacters.ContainsKey(newPosition) : CurrentFemaleCharacters.ContainsKey(newPosition)) && ControllerForPosition(newPosition, sex).UseSyncedTime)
+                        {
+                            found = true;
+                            break;
+                        }
+
+                        newPosition++;
+                    }                    
+                    if (!found && newPosition > maxPosition && rotationMode == CharacterRandomizerCharaController.RotationMode.WRAP_FWD)
+                        newPosition = 1;
+                    else if (!found)
+                        continue;
+
+                    if (sex == 0)
+                        RotatedMaleCharacters.Add(newPosition, CurrentMaleCharacters[position]);
+                    else
+                        RotatedFemaleCharacters.Add(newPosition, CurrentFemaleCharacters[position]);
+                }
+            }
+            else
+            {
+                foreach (int position in sex == 0 ? CurrentMaleCharacters.Keys : CurrentFemaleCharacters.Keys)
+                {
+                    if (!ControllerForPosition(position, sex).UseSyncedTime)
+                        continue;
+
+                    bool found = false;
+                    int newPosition = position - 1;
+                    while (newPosition > 0)
+                    {
+                        if ((sex == 0 ? CurrentMaleCharacters.ContainsKey(newPosition) : CurrentFemaleCharacters.ContainsKey(newPosition)) && ControllerForPosition(newPosition, sex).UseSyncedTime)
+                        {
+                            found = true;
+                            break;
+                        }
+
+                        newPosition--;
+                    }
+                    if (!found && newPosition == 0 && rotationMode == CharacterRandomizerCharaController.RotationMode.WRAP_REV)
+                        newPosition = maxPosition;
+                    else if (!found)
+                        continue;
+
+                    if (sex == 0)
+                        RotatedMaleCharacters.Add(newPosition, CurrentMaleCharacters[position]);
+                    else
+                        RotatedFemaleCharacters.Add(newPosition, CurrentFemaleCharacters[position]);
+                }
             }
         }
 
@@ -266,6 +365,18 @@ namespace CharacterRandomizer
             Instance.Log.LogInfo($"Current Female Characters:");
             foreach (int position in CharacterRandomizerPlugin.CurrentFemaleCharacters.Keys)
                 Instance.Log.LogInfo($"{position}: {ControllerForPosition(position, 1)?.ChaControl.fileParam.fullname} {CharacterRandomizerPlugin.CurrentFemaleCharacters[position]}");
+#endif
+        }
+
+        public static void LogRotationCharacterRegistry()
+        {
+#if DEBUG
+            Instance.Log.LogInfo($"Rotated Male Characters:");
+            foreach (int position in CharacterRandomizerPlugin.RotatedMaleCharacters.Keys)
+                Instance.Log.LogInfo($"{position}: {CharacterRandomizerPlugin.RotatedMaleCharacters[position]}");
+            Instance.Log.LogInfo($"Rotated Female Characters:");
+            foreach (int position in CharacterRandomizerPlugin.RotatedFemaleCharacters.Keys)
+                Instance.Log.LogInfo($"{position}: {CharacterRandomizerPlugin.RotatedFemaleCharacters[position]}");
 #endif
         }
 

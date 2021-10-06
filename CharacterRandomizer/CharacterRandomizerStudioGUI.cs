@@ -114,13 +114,17 @@ namespace CharacterRandomizer
         }
 
         private void PropagateSyncTiming()
-        {            
+        {
+            if (!controller.UseSyncedTime)
+                return;
+
             foreach (CharacterRandomizerCharaController randomizer in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
             {
                 if (randomizer.UseSyncedTime)
                 {
                     randomizer.BaseDelaySeconds = controller.BaseDelaySeconds;
                     randomizer.DelayVarianceRange = controller.DelayVarianceRange;
+                    randomizer.Rotation = controller.Rotation;
                 }
             }
         }
@@ -197,7 +201,12 @@ namespace CharacterRandomizer
                     GUILayout.Space(3);
                     controller.CharReplacementMode = (CharacterRandomizerCharaController.ReplacementMode)GUILayout.SelectionGrid((int)controller.CharReplacementMode, new string[] { "Random", "Cyclic - Last Update", "Cyclic - Last Update Desc", "Cyclic - File Name", "Cyclic - File Name Desc", "Cyclic - Chara Name", "Cyclic - Chara Name Desc" }, 3);
                     GUILayout.Space(3);
-                    controller.Rotation = (CharacterRandomizerCharaController.RotationMode)GUILayout.SelectionGrid((int)controller.Rotation, new string[] { "None", "Forward", "Reverse" }, 3);
+                    CharacterRandomizerCharaController.RotationMode newRotation = (CharacterRandomizerCharaController.RotationMode)GUILayout.SelectionGrid((int)controller.Rotation, new string[] { "None", "Forward", "Reverse", "Wrap Fwd", "Wrap Rev" }, 5);
+                    if (newRotation != controller.Rotation)
+                    {
+                        controller.Rotation = newRotation;
+                        PropagateSyncTiming();
+                    }
                     GUILayout.Space(3);
 
 

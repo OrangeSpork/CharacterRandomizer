@@ -138,18 +138,12 @@ namespace CharacterRandomizer
         private ManualLogSource log => CharacterRandomizerPlugin.Instance.Log;
         private static MethodInfo onCoordinateBeingSavedMethod = AccessTools.Method(typeof(CharacterApi), "OnCoordinateBeingSaved");
 
+        private int position;
         public int Position
         {
             get
             {
-                try
-                {
-                    return int.Parse(ChaControl.gameObject.name.Substring(ChaControl.gameObject.name.Length - 3));
-                }
-                catch
-                {
-                    return 0;
-                }
+                return position;
             }
         }
 
@@ -174,6 +168,9 @@ namespace CharacterRandomizer
 
         protected override void OnDestroy()
         {
+#if DEBUG
+            log.LogInfo($"Cleaning up current chara registry for {Position} {ChaControl.chaFile.parameter.fullname}");
+#endif
             ClearCurrentCharacterRegistry();
 
             base.OnDestroy();            
@@ -221,46 +218,14 @@ namespace CharacterRandomizer
         {
             if (Rotation == RotationMode.NONE || !UseSyncedTime)
                 return new CharacterRandomizerPlugin.ChaFileInfo();
+            else if (ChaControl.sex == 0 ? CharacterRandomizerPlugin.RotatedMaleCharacters.Keys.Count == 0 : CharacterRandomizerPlugin.RotatedFemaleCharacters.Keys.Count == 0)
+                return new CharacterRandomizerPlugin.ChaFileInfo();
+            else if (ChaControl.sex == 0 & CharacterRandomizerPlugin.RotatedMaleCharacters.ContainsKey(Position))
+                return new CharacterRandomizerPlugin.ChaFileInfo(CharacterRandomizerPlugin.RotatedMaleCharacters[Position], null, DateTime.Now);
+            else if (ChaControl.sex == 1 & CharacterRandomizerPlugin.RotatedFemaleCharacters.ContainsKey(Position))
+                return new CharacterRandomizerPlugin.ChaFileInfo(CharacterRandomizerPlugin.RotatedFemaleCharacters[Position], null, DateTime.Now);
             else
             {
-                if (Rotation == RotationMode.FWD)
-                {
-                    int fromPosition = Position;
-                    while (fromPosition > 0)
-                    {
-                        fromPosition--;
-                        
-                        if ((ChaControl.sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters : CharacterRandomizerPlugin.CurrentFemaleCharacters).TryGetValue(fromPosition, out string fileName) && CharacterRandomizerPlugin.ControllerForPosition(fromPosition, ChaControl.sex) != null && CharacterRandomizerPlugin.ControllerForPosition(fromPosition, ChaControl.sex).UseSyncedTime)
-                        {
-#if DEBUG
-                            log.LogInfo($"Rotating {Position} to {fromPosition} with {fileName}");
-#endif
-
-                            return new CharacterRandomizerPlugin.ChaFileInfo(fileName, null, DateTime.Now);
-                        }
-                    }
-                }
-                else
-                {
-                    int maxPosition = 0;
-                    foreach (int maxPositionCand in ChaControl.sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters.Keys : CharacterRandomizerPlugin.CurrentFemaleCharacters.Keys)
-                    {
-                        if (maxPositionCand > maxPosition)
-                            maxPosition = maxPositionCand;
-                    }
-                    int fromPosition = Position;
-                    while (fromPosition <= maxPosition)
-                    {
-                        fromPosition++;
-                        if ((ChaControl.sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters : CharacterRandomizerPlugin.CurrentFemaleCharacters).TryGetValue(fromPosition, out string fileName) && CharacterRandomizerPlugin.ControllerForPosition(fromPosition, ChaControl.sex) != null && CharacterRandomizerPlugin.ControllerForPosition(fromPosition, ChaControl.sex).UseSyncedTime)
-                        {
-#if DEBUG
-                            log.LogInfo($"Rotating {Position} to {fromPosition} with {fileName}");
-#endif
-                            return new CharacterRandomizerPlugin.ChaFileInfo(fileName, null, DateTime.Now);
-                        }
-                    }
-                }
 #if DEBUG
                 log.LogInfo($"No Rotation Available");
 #endif
@@ -475,14 +440,6 @@ namespace CharacterRandomizer
 
                 });
 
-                if (noDupes)
-                {
-                    files.RemoveAll(fi =>
-                    {
-                        return CheckCurrentCharacterRegistry(fi.fileName);                        
-                    });
-                }
-
                 if (!string.IsNullOrWhiteSpace(namePattern))
                 {
                     Regex nameRegex = new Regex(namePattern);
@@ -501,14 +458,25 @@ namespace CharacterRandomizer
                 {
                     CharacterRandomizerPlugin.ChaFileInfo replacement = files[UnityEngine.Random.Range(0, files.Count - 1)];
 
-                    if (string.Equals(replacement.fileName, lastReplacementFile) && files.Count == 1)
+                    if (Path.GetFullPath(replacement.fileName) == Path.GetFullPath(lastReplacementFile) && files.Count == 1)
                     {
                         log.LogWarning($"Cannot Replace Character, No Alternatives Available");
                         log.LogMessage($"Cannot Replace Character, No Available Matches");
                         return new CharacterRandomizerPlugin.ChaFileInfo(null, null, DateTime.Now);
                     }
+                    else if (noDupes)
+                    {
+                        List<CharacterRandomizerPlugin.ChaFileInfo> temp = new List<CharacterRandomizerPlugin.ChaFileInfo>(files);
+                        temp.RemoveAll(fi => CheckCurrentCharacterRegistry(fi.fileName));
+                        if (temp.Count == 0)
+                        {
+                            log.LogWarning($"Cannot Replace Character, No Alternatives Available");
+                            log.LogMessage($"Cannot Replace Character, No Available Matches");
+                            return new CharacterRandomizerPlugin.ChaFileInfo(null, null, DateTime.Now);
+                        }
+                    }
 
-                    while (string.Equals(replacement.fileName, lastReplacementFile))
+                    while (Path.GetFullPath(replacement.fileName) == Path.GetFullPath(lastReplacementFile) || (noDupes && CheckCurrentCharacterRegistry(replacement.fileName)))
                     {
                         CharacterRandomizerPlugin.ChaFileInfo pickedFile = files[UnityEngine.Random.Range(0, files.Count - 1)];
                         replacement = new CharacterRandomizerPlugin.ChaFileInfo(pickedFile.fileName, pickedFile.charaName, pickedFile.lastUpdated);
@@ -547,39 +515,44 @@ namespace CharacterRandomizer
                     
                     for(int i = 0; i < files.Count; i++)
                     {
-                        if (string.Equals(files[i].fileName, lastReplacementFile))
+                        try
                         {
+                            if (Path.GetFullPath(files[i].fileName) == Path.GetFullPath(lastReplacementFile))
+                            {
 #if DEBUG
-                            log.LogInfo($"Matched Current Chara {lastReplacementFile} to {files[i].fileName}");
+                                log.LogInfo($"Matched Current Chara {lastReplacementFile} to {files[i].fileName}");
 #endif
-                            cyclic = i;
-                            break;
+                                cyclic = i;
+                                break;
+                            }
+                        }
+                        catch
+                        {
+
                         }
                     }
-                        
-                    if (cyclic < 0)
-                        cyclic = 0;
-                    else
-                        cyclic++;
 
-                    if (cyclic >= files.Count)
+                    int originalPosition = cyclic;
+
+                    do
                     {
+                        if (cyclic >= files.Count)
+                        {
 #if DEBUG
-                        log.LogInfo($"Looping Cyclic Sort {charReplacementMode} Last Index: {cyclic - 1} Next Index: {0} Picked: {files[0]} ");
+                            log.LogInfo($"Looping Cyclic Sort {charReplacementMode} Last Index: {cyclic} Next Index: {0} Picked: {files[0]} ");
 #endif
-                        CharacterRandomizerPlugin.ChaFileInfo pickedFile = files[0];
-                        pickedFile = new CharacterRandomizerPlugin.ChaFileInfo(pickedFile.fileName, pickedFile.charaName, pickedFile.lastUpdated);
-                        return pickedFile;
-                    }
-                    else
-                    {
-#if DEBUG
-                        log.LogInfo($"Cyclic Sort {charReplacementMode} Last Index: {cyclic - 1} Next Index: {cyclic} Picked: {files[cyclic]} ");
-#endif
+                            cyclic = 0;
+
+                        }
+                        else
+                            cyclic++;
+
                         CharacterRandomizerPlugin.ChaFileInfo pickedFile = files[cyclic];
-                        pickedFile = new CharacterRandomizerPlugin.ChaFileInfo(pickedFile.fileName, pickedFile.charaName, pickedFile.lastUpdated);
-                        return pickedFile;
-                    }
+                        if (!CheckCurrentCharacterRegistry(pickedFile.fileName))
+                            return pickedFile;
+
+                    } while (cyclic != originalPosition);
+                    return new CharacterRandomizerPlugin.ChaFileInfo();
                 }
             }
             catch (Exception e)
@@ -593,11 +566,11 @@ namespace CharacterRandomizer
         {
             if (ChaControl.sex == 0)
             {
-                return CharacterRandomizerPlugin.CurrentMaleCharacters.Values.Contains(fileName);
+                return CharacterRandomizerPlugin.CurrentMaleCharacters.Values.Contains(Path.GetFullPath(fileName));
             }
             else
             {
-                return CharacterRandomizerPlugin.CurrentFemaleCharacters.Values.Contains(fileName);
+                return CharacterRandomizerPlugin.CurrentFemaleCharacters.Values.Contains(Path.GetFullPath(fileName));
             }
         }
 
@@ -607,7 +580,7 @@ namespace CharacterRandomizer
             {
                 if (!CharacterRandomizerPlugin.CurrentMaleCharacters.TryGetValue(Position, out string positionName) || positionName != fileName)
                 {
-                    CharacterRandomizerPlugin.CurrentMaleCharacters[Position] = fileName;
+                    CharacterRandomizerPlugin.CurrentMaleCharacters[Position] = Path.GetFullPath(fileName);
                     CharacterRandomizerPlugin.LogCurrentCharacterRegistry();
                 }
             }
@@ -615,7 +588,7 @@ namespace CharacterRandomizer
             {
                 if (!CharacterRandomizerPlugin.CurrentFemaleCharacters.TryGetValue(Position, out string positionName) || positionName != fileName)
                 {
-                    CharacterRandomizerPlugin.CurrentFemaleCharacters[Position] = fileName;
+                    CharacterRandomizerPlugin.CurrentFemaleCharacters[Position] = Path.GetFullPath(fileName);
                     CharacterRandomizerPlugin.LogCurrentCharacterRegistry();
                 }
             }
@@ -639,6 +612,15 @@ namespace CharacterRandomizer
 #if DEBUG
             log.LogInfo($"Reloading Character {ChaControl.fileParam.fullname} {ChaControl.chaFile.charaFileName} Last Loaded: {CharacterRandomizerPlugin.LastLoadedFile} Scene Load: {StudioSaveLoadApi.LoadInProgress} Scene Import: {StudioSaveLoadApi.ImportInProgress} Loaded: {Loaded} MS: {maintainState}");
 #endif
+
+            try
+            {
+                position = int.Parse(ChaControl.gameObject.name.Substring(ChaControl.gameObject.name.Length - 3));
+            }
+            catch
+            {
+            }
+
 
             if (StudioSaveLoadApi.LoadInProgress && Loaded)
                 Loaded = false;
@@ -746,7 +728,9 @@ namespace CharacterRandomizer
         { 
             NONE = 0,
             FWD = 1,
-            REV = 2
+            REV = 2,
+            WRAP_FWD = 3,
+            WRAP_REV = 4
         }
 
 
