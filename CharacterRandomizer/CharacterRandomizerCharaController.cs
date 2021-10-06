@@ -580,7 +580,14 @@ namespace CharacterRandomizer
             {
                 if (!CharacterRandomizerPlugin.CurrentMaleCharacters.TryGetValue(Position, out string positionName) || positionName != fileName)
                 {
-                    CharacterRandomizerPlugin.CurrentMaleCharacters[Position] = Path.GetFullPath(fileName);
+                    try
+                    {
+                        CharacterRandomizerPlugin.CurrentMaleCharacters[Position] = Path.GetFullPath(fileName);
+                    }
+                    catch
+                    {
+                        CharacterRandomizerPlugin.CurrentMaleCharacters[Position] = fileName;
+                    }
                     CharacterRandomizerPlugin.LogCurrentCharacterRegistry();
                 }
             }
@@ -588,7 +595,14 @@ namespace CharacterRandomizer
             {
                 if (!CharacterRandomizerPlugin.CurrentFemaleCharacters.TryGetValue(Position, out string positionName) || positionName != fileName)
                 {
-                    CharacterRandomizerPlugin.CurrentFemaleCharacters[Position] = Path.GetFullPath(fileName);
+                    try
+                    {
+                        CharacterRandomizerPlugin.CurrentFemaleCharacters[Position] = Path.GetFullPath(fileName);
+                    }
+                    catch
+                    {
+                        CharacterRandomizerPlugin.CurrentFemaleCharacters[Position] = fileName;
+                    }
                     CharacterRandomizerPlugin.LogCurrentCharacterRegistry();
                 }
             }

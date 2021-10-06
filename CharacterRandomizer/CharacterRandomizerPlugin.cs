@@ -128,7 +128,7 @@ namespace CharacterRandomizer
                 if (ctrlInfo.GetType() == typeof(OCIFolder))
                 {
                     OCIFolder folder = (OCIFolder)ctrlInfo;
-                    if (folder.name != null && folder.name.ToUpper().StartsWith("-RNG") && ctrlInfo.treeNodeObject.visible)
+                    if (folder.name != null && folder.name.ToUpper().StartsWith("-RNG"))
                     {
                         FolderRequestFlags.Add(folder);
                     }
