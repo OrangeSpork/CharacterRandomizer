@@ -458,7 +458,7 @@ namespace CharacterRandomizer
                 {
                     CharacterRandomizerPlugin.ChaFileInfo replacement = files[UnityEngine.Random.Range(0, files.Count - 1)];
 
-                    if (Path.GetFullPath(replacement.fileName) == Path.GetFullPath(lastReplacementFile) && files.Count == 1)
+                    if (!string.IsNullOrWhiteSpace(lastReplacementFile) && Path.GetFullPath(replacement.fileName) == Path.GetFullPath(lastReplacementFile) && files.Count == 1)
                     {
                         log.LogWarning($"Cannot Replace Character, No Alternatives Available");
                         log.LogMessage($"Cannot Replace Character, No Available Matches");
@@ -476,7 +476,7 @@ namespace CharacterRandomizer
                         }
                     }
 
-                    while (Path.GetFullPath(replacement.fileName) == Path.GetFullPath(lastReplacementFile) || (noDupes && CheckCurrentCharacterRegistry(replacement.fileName)))
+                    while (!string.IsNullOrWhiteSpace(lastReplacementFile) && Path.GetFullPath(replacement.fileName) == Path.GetFullPath(lastReplacementFile) || (noDupes && CheckCurrentCharacterRegistry(replacement.fileName)))
                     {
                         CharacterRandomizerPlugin.ChaFileInfo pickedFile = files[UnityEngine.Random.Range(0, files.Count - 1)];
                         replacement = new CharacterRandomizerPlugin.ChaFileInfo(pickedFile.fileName, pickedFile.charaName, pickedFile.lastUpdated);
