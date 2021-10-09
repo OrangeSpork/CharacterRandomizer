@@ -39,7 +39,12 @@ namespace CharacterRandomizer
             get { return running; }
             set {
                 if (!running && value)
-                    ScheduleNextReplacement();
+                {
+                    if (!UseSyncedTime)
+                        ScheduleNextReplacement();
+                    else
+                        StartCoroutine(ScheduleNextReplacementAsync());
+                }                    
 
                 running = value;
             }
@@ -180,7 +185,11 @@ namespace CharacterRandomizer
         {
             base.Update(); 
 
-            if (this.running &&  !useSyncedTime && Time.time > nextReplacementTime)
+            if (this.running && useSyncedTime && CharacterRandomizerPlugin.NextReplacementTime == 0)
+            {
+                StartCoroutine(ScheduleNextReplacementAsync());
+            }
+            else if (this.running &&  !useSyncedTime && Time.time > nextReplacementTime)
             {
                 // Time to do replacement
                 if (fullAsync)

@@ -52,7 +52,7 @@ namespace CharacterRandomizer
                 }
 
 
-                CharacterRandomizerPlugin.NextReplacementTime = float.MaxValue;
+                CharacterRandomizerPlugin.NextReplacementTime = 0f;
                 // Clear the loaded flags
                 CharacterApi.ControllerRegistration controllerRegistration = CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID);
                 foreach (CharacterRandomizerCharaController charaController in controllerRegistration.Instances)
@@ -68,7 +68,7 @@ namespace CharacterRandomizer
                 CharacterRandomizerPlugin.FolderRequestFlags.Clear();
                 CharacterRandomizerPlugin.CurrentMaleCharacters.Clear();
                 CharacterRandomizerPlugin.CurrentFemaleCharacters.Clear();
-                CharacterRandomizerPlugin.NextReplacementTime = float.MaxValue;
+                CharacterRandomizerPlugin.NextReplacementTime = 0f;
             }
         }
 

@@ -122,6 +122,7 @@ namespace CharacterRandomizer
             {
                 if (randomizer.UseSyncedTime)
                 {
+                    randomizer.Running = controller.Running;
                     randomizer.BaseDelaySeconds = controller.BaseDelaySeconds;
                     randomizer.DelayVarianceRange = controller.DelayVarianceRange;
                     randomizer.Rotation = controller.Rotation;
@@ -146,7 +147,13 @@ namespace CharacterRandomizer
                     GUILayout.Space(5);
 
                     GUILayout.BeginHorizontal();
-                    controller.Running = GUILayout.Toggle(controller.Running, "  Running");
+
+                    bool newRunning = GUILayout.Toggle(controller.Running, "  Running");
+                    if (newRunning != controller.Running)
+                    {
+                        controller.Running = newRunning;
+                        PropagateSyncTiming();
+                    }
                     if (controller.Running)
                     {
                         GUILayout.Space(5);

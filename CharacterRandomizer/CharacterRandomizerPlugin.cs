@@ -28,7 +28,7 @@ namespace CharacterRandomizer
 
         public const string GUID = "orange.spork.characterrandomizer";
         public const string PluginName = "Character Randomizer";
-        public const string Version = "1.1.3";
+        public const string Version = "1.1.4";
 
         public static CharacterRandomizerPlugin Instance { get; set; }
 
@@ -56,7 +56,7 @@ namespace CharacterRandomizer
         private static MethodInfo loadFileMethod = AccessTools.Method(typeof(ChaFile), "LoadFile", new Type[] { typeof(string), typeof(int), typeof(bool), typeof(bool) });
 
         public static float LastReplacementTime { get; set; }
-        public static float NextReplacementTime { get; set; } = float.MaxValue;
+        public static float NextReplacementTime { get; set; } = 0f;
         public static string LastLoadedFile { get; set; }
         public static void ConvertCharaFilePathMonitor(string __result)
         {
