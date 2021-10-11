@@ -14,6 +14,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using UnityEngine;
@@ -28,7 +29,7 @@ namespace CharacterRandomizer
 
         public const string GUID = "orange.spork.characterrandomizer";
         public const string PluginName = "Character Randomizer";
-        public const string Version = "1.1.4";
+        public const string Version = "1.1.5";
 
         public static CharacterRandomizerPlugin Instance { get; set; }
 
@@ -100,6 +101,15 @@ namespace CharacterRandomizer
                 }
             }
 
+            if (NextReplacementTime > 0 && Time.time > NextReplacementTime)
+            {
+                if (CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances.Cast<CharacterRandomizerCharaController>().Any(cont => cont.Running))
+                    ReplaceAll(false);
+                else
+                    NextReplacementTime = 0;
+                
+            }
+
             CheckForRequestedReplacementsViaFolder();
 
         }
@@ -154,7 +164,7 @@ namespace CharacterRandomizer
     #if DEBUG
                         Log.LogInfo($"Replace ALL via folder requested.");
     #endif
-                        CharacterRandomizerPlugin.ReplaceAll();
+                        CharacterRandomizerPlugin.ReplaceAll(true);                        
                     }
                     else
                     {
@@ -170,11 +180,11 @@ namespace CharacterRandomizer
 
                             foreach (CharacterRandomizerCharaController randomizer in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
                             {
-                                if (randomizer.ChaControl.sex == 0 && sex == 'M' && randomizer.Position == index)
+                                if (randomizer.ChaControl.sex == 0 && sex == 'M' && randomizer.RotationOrder == index)
                                 {
                                     randomizer.ReplaceCharacter();
                                 }
-                                else if (randomizer.ChaControl.sex == 1 && sex == 'F' && randomizer.Position == index)
+                                else if (randomizer.ChaControl.sex == 1 && sex == 'F' && randomizer.RotationOrder == index)
                                 {
                                     randomizer.ReplaceCharacter();
                                 }
@@ -210,7 +220,7 @@ namespace CharacterRandomizer
             }); 
         }
 
-        public static void ReplaceAll()
+        public static void ReplaceAll(bool force)
         {
             RotatedFemaleCharacters.Clear();
             CharacterRandomizerCharaController.RotationMode femaleRotationMode = RotationModeForSex(1);
@@ -230,7 +240,7 @@ namespace CharacterRandomizer
 
             foreach (CharacterRandomizerCharaController randomizer in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
             {
-                if (randomizer.UseSyncedTime)
+                if (randomizer.UseSyncedTime && (force || randomizer.Running))
                     randomizer.ReplaceCharacter();
             }
             
@@ -248,12 +258,8 @@ namespace CharacterRandomizer
 
         private static void CalculateRotations(CharacterRandomizerCharaController.RotationMode rotationMode, int sex)
         {
-            int maxPosition = 0;
-            foreach (int maxPositionCand in sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters.Keys : CharacterRandomizerPlugin.CurrentFemaleCharacters.Keys)
-            {
-                if (maxPositionCand > maxPosition)
-                    maxPosition = maxPositionCand;
-            }
+            int maxPosition = sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters.Keys.Max() : CharacterRandomizerPlugin.CurrentFemaleCharacters.Keys.Max();
+           
             if (rotationMode == CharacterRandomizerCharaController.RotationMode.FWD || rotationMode == CharacterRandomizerCharaController.RotationMode.WRAP_FWD)
             {
                 foreach (int position in sex == 0 ? CurrentMaleCharacters.Keys : CurrentFemaleCharacters.Keys)
@@ -388,7 +394,7 @@ namespace CharacterRandomizer
         {
             foreach (CharacterRandomizerCharaController controller in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
             {
-                if (controller.Position == position && controller.ChaControl.sex == sex)
+                if (controller.RotationOrder == position && controller.ChaControl.sex == sex)
                     return controller;
             }
             return null;

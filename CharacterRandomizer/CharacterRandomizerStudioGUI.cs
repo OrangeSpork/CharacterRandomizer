@@ -15,7 +15,7 @@ namespace CharacterRandomizer
     {
         private static ManualLogSource Log => CharacterRandomizerPlugin.Instance.Log;
 
-        private static Rect windowRect = new Rect(120, 220, 600, 625);
+        private static Rect windowRect = new Rect(120, 220, 600, 655);
         private static readonly GUILayoutOption expandLayoutOption = GUILayout.ExpandWidth(true);
 
         private static GUIStyle labelStyle;
@@ -118,6 +118,10 @@ namespace CharacterRandomizer
             if (!controller.UseSyncedTime)
                 return;
 
+            if (!CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances.Cast<CharacterRandomizerCharaController>().Any(cont => (cont != controller) && cont.Running))
+                controller.ScheduleNextReplacement(true);
+
+
             foreach (CharacterRandomizerCharaController randomizer in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
             {
                 if (randomizer.UseSyncedTime)
@@ -127,6 +131,44 @@ namespace CharacterRandomizer
                     randomizer.DelayVarianceRange = controller.DelayVarianceRange;
                     randomizer.Rotation = controller.Rotation;
                 }
+            }
+        }
+
+        private void IncrementRotationOrder(CharacterRandomizerCharaController controller)
+        {
+            // not beyond max
+            if (controller.RotationOrder == CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances.Where(cont => cont.ChaControl.sex == controller.ChaControl.sex).Select(cont => ((CharacterRandomizerCharaController)cont).RotationOrder).Max())
+                return;
+
+            // increment me
+            controller.RotationOrder++;
+
+            // if anyone equal to me decrement them to swap them into my place
+            foreach (CharacterRandomizerCharaController randomizer in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
+            {
+                if (randomizer != controller && randomizer.ChaControl.sex == controller.ChaControl.sex && randomizer.RotationOrder == controller.RotationOrder)
+                    randomizer.RotationOrder--;
+
+                randomizer.UpdateCurrentCharacterRegistry(randomizer.LastReplacementFile);
+            }
+        }
+
+        private void DecrementRotationOrder(CharacterRandomizerCharaController controller)
+        {
+            // not below 1
+            if (controller.RotationOrder == 1)
+                return;
+
+            //decrement me
+            controller.RotationOrder--;
+
+            // if anyone equal to me increment them to swap them into my place
+            foreach (CharacterRandomizerCharaController randomizer in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
+            {
+                if (randomizer != controller && randomizer.ChaControl.sex == controller.ChaControl.sex && randomizer.RotationOrder == controller.RotationOrder)
+                    randomizer.RotationOrder++;
+
+                randomizer.UpdateCurrentCharacterRegistry(randomizer.LastReplacementFile);
             }
         }
 
@@ -215,6 +257,28 @@ namespace CharacterRandomizer
                         PropagateSyncTiming();
                     }
                     GUILayout.Space(3);
+                    GUILayout.BeginHorizontal();
+                    GUILayout.Label($"Rotation Order: {controller.RotationOrder}");
+                    GUILayout.Space(3);
+                    if (controller.RotationOrder != CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances.Where(cont => cont.ChaControl.sex == controller.ChaControl.sex).Select( cont => ((CharacterRandomizerCharaController)cont).RotationOrder).Max())
+                    {
+                        if (GUILayout.Button("+"))
+                        {
+                            IncrementRotationOrder(controller);
+                        };
+                        GUILayout.Space(3);
+                    }
+                    if (controller.RotationOrder != 1)
+                    {
+                        if (GUILayout.Button("-"))
+                        {
+                            DecrementRotationOrder(controller);
+                        };
+                    }
+                    GUILayout.FlexibleSpace();
+                    GUILayout.EndHorizontal();
+
+                    GUILayout.Space(3);
 
 
                     GUILayout.Label($"Replacement Time is {CharacterRandomizerPlugin.MinimumDelay.Value} seconds + Base + Random seconds");
@@ -270,12 +334,12 @@ namespace CharacterRandomizer
 
                     GUILayout.Space(5);
                     if (GUILayout.Button("Replace Me"))
-                        controller.ReplaceCharacter();
+                        controller.ReplaceCharacter(true);
 
                     GUILayout.Space(5);
                     if (GUILayout.Button("Replace All Sync'd"))
                     {
-                        CharacterRandomizerPlugin.ReplaceAll();
+                        CharacterRandomizerPlugin.ReplaceAll(true);
                     }
 
                     GUILayout.EndHorizontal();
@@ -286,7 +350,7 @@ namespace CharacterRandomizer
                     GUILayout.FlexibleSpace();
                     if (GUILayout.Button("Replace All Sync'd"))
                     {
-                        CharacterRandomizerPlugin.ReplaceAll();
+                        CharacterRandomizerPlugin.ReplaceAll(true);
                     }
                     GUILayout.Space(20);
                 }
