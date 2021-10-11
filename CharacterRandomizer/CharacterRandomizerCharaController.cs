@@ -274,7 +274,7 @@ namespace CharacterRandomizer
             string fileName = "";
             if (preserveOutfit)
             {
-                fileName = ChaControl.gameObject.GetInstanceID() + "-randomizer.png";
+                fileName = ChaControl.gameObject.GetInstanceID() + "-randomizer-" + RotationOrder + ".png";
                 CharaCustomFunctionController[] controllers = ChaControl.gameObject.GetComponents<CharaCustomFunctionController>();
 
                 // Need to cheat to make KKAPI behave with saving a coordinate from Studio
@@ -606,14 +606,29 @@ namespace CharacterRandomizer
 
         private void ClearCurrentCharacterRegistry()
         {
+            CharacterRandomizerPlugin.LogCurrentCharacterRegistry();
+
             if (ChaControl.sex == 0)
-            {
-                CharacterRandomizerPlugin.CurrentMaleCharacters.Remove(RotationOrder);
-            }
+                CharacterRandomizerPlugin.CurrentMaleCharacters.Clear();
             else
+                CharacterRandomizerPlugin.CurrentFemaleCharacters.Clear();
+
+
+            // Everyone higher goes down 1
+            foreach (CharacterRandomizerCharaController randomizer in CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances)
             {
-                CharacterRandomizerPlugin.CurrentFemaleCharacters.Remove(RotationOrder);
+#if DEBUG
+                log.LogInfo($"Checking {randomizer == this} {ReferenceEquals(randomizer, this)} {randomizer.ChaControl.sex} {randomizer.rotationOrder} {randomizer.ChaControl.fileParam.fullname} {randomizer.LastReplacementFile}");
+#endif
+                if (randomizer != this && randomizer.ChaControl.sex == ChaControl.sex && randomizer.RotationOrder > RotationOrder)
+                {
+                    randomizer.RotationOrder--;                    
+                }
+
+                if (randomizer != this)
+                    randomizer.UpdateCurrentCharacterRegistry(randomizer.LastReplacementFile);
             }
+
             CharacterRandomizerPlugin.LogCurrentCharacterRegistry();
         }       
 
@@ -646,6 +661,19 @@ namespace CharacterRandomizer
                         log.LogWarning($"Unable to identify loaded character file: {ChaControl.chaFile.charaFileName}");
                 }
             }
+
+            if (rotationOrder == -1)
+            {
+                RotationOrder = CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances.Where(cont => cont.ChaControl.sex == ChaControl.sex).Cast<CharacterRandomizerCharaController>().Select(rand => rand.RotationOrder).Max();
+                if (RotationOrder <= 0)
+                    RotationOrder = 1;
+                else
+                    RotationOrder++;
+            }
+#if DEBUG
+            log.LogInfo($"Assigning RotationOrder {ChaControl.fileParam.fullname} {RotationOrder}");
+#endif
+
 #if DEBUG
             log.LogInfo($"Registering Loaded Character {loadedFile}");
 #endif
@@ -696,9 +724,6 @@ namespace CharacterRandomizer
                 useSyncedTime = true;
                 preserveOutfit = false;
                 outfitFile = "";
-                lastReplacementFile = "";
-
-                UpdateCurrentCharacterRegistry(lastReplacementFile);
             }
 
             Loaded = true;
