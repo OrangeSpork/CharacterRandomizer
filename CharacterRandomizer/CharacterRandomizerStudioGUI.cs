@@ -204,7 +204,7 @@ namespace CharacterRandomizer
                     GUILayout.EndHorizontal();
                     GUILayout.Space(3);
 
-                    controller.PreserveOutfit = GUILayout.Toggle(controller.PreserveOutfit, "  Preserve Outfit (Experimental - has issues with some plugins)");
+                    controller.PreserveOutfit = GUILayout.Toggle(controller.PreserveOutfit, "  Preserve Outfit");
                     GUILayout.Space(3);
 
                     if (!controller.PreserveOutfit)
