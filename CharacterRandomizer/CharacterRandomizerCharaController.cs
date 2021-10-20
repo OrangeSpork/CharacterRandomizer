@@ -245,6 +245,8 @@ namespace CharacterRandomizer
             if (string.IsNullOrEmpty(replacementChaInfo.fileName))
                 yield break;
 
+            UpdateCurrentCharacterRegistry(replacementChaInfo.fileName);
+
             if (!UseSyncedTime)
                 ScheduleNextReplacement();
             else
