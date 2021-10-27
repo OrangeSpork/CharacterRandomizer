@@ -536,10 +536,13 @@ namespace CharacterRandomizer
                     }
 
                     int originalPosition = cyclic;
+#if DEBUG
+                    log.LogInfo($"Current Chara Index {originalPosition} File Count {files.Count}");
+#endif
 
                     do
                     {
-                        if (cyclic >= files.Count)
+                        if (cyclic >= files.Count - 1)
                         {
 #if DEBUG
                             log.LogInfo($"Looping Cyclic Sort {charReplacementMode} Last Index: {cyclic} Next Index: {0} Picked: {files[0]} ");
