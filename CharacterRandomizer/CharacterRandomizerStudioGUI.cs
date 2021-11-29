@@ -136,10 +136,6 @@ namespace CharacterRandomizer
 
         private void IncrementRotationOrder(CharacterRandomizerCharaController controller)
         {
-            // not beyond max
-            if (controller.RotationOrder == CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances.Where(cont => cont.ChaControl.sex == controller.ChaControl.sex).Select(cont => ((CharacterRandomizerCharaController)cont).RotationOrder).Max())
-                return;
-
             // increment me
             controller.RotationOrder++;
 
@@ -155,10 +151,6 @@ namespace CharacterRandomizer
 
         private void DecrementRotationOrder(CharacterRandomizerCharaController controller)
         {
-            // not below 1
-            if (controller.RotationOrder == 1)
-                return;
-
             //decrement me
             controller.RotationOrder--;
 
@@ -260,7 +252,7 @@ namespace CharacterRandomizer
                     GUILayout.BeginHorizontal();
                     GUILayout.Label($"Rotation Order: {controller.RotationOrder}");
                     GUILayout.Space(3);
-                    if (controller.RotationOrder != CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances.Where(cont => cont.ChaControl.sex == controller.ChaControl.sex).Select( cont => ((CharacterRandomizerCharaController)cont).RotationOrder).Max())
+                    if (controller.RotationOrder != CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances.Where(cont => cont.ChaControl.sex == controller.ChaControl.sex).Count())
                     {
                         if (GUILayout.Button("+"))
                         {
