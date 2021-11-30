@@ -479,12 +479,19 @@ namespace CharacterRandomizer
                         }
                     }
 
-                    while (!string.IsNullOrWhiteSpace(lastReplacementFile) && Path.GetFullPath(replacement.fileName) == Path.GetFullPath(lastReplacementFile) || (noDupes && CheckCurrentCharacterRegistry(replacement.fileName)))
+                    files.RemoveAll(cfi => (!string.IsNullOrWhiteSpace(lastReplacementFile) && Path.GetFullPath(cfi.fileName) == Path.GetFullPath(lastReplacementFile)) || (noDupes && CheckCurrentCharacterRegistry(cfi.fileName)));
+                    if (files.Count == 0)
+                    {
+                        log.LogWarning($"Cannot Replace Character, No Alternatives Available");
+                        log.LogMessage($"Cannot Replace Character, No Available Matches");
+                        return new CharacterRandomizerPlugin.ChaFileInfo(null, null, DateTime.Now);
+                    }
+                    else
                     {
                         CharacterRandomizerPlugin.ChaFileInfo pickedFile = files[UnityEngine.Random.Range(0, files.Count - 1)];
                         replacement = new CharacterRandomizerPlugin.ChaFileInfo(pickedFile.fileName, pickedFile.charaName, pickedFile.lastUpdated);
+                        return replacement;
                     }
-                    return replacement;
                 }
                 else
                 {
