@@ -1066,8 +1066,8 @@ namespace CharacterRandomizer
                 if (pluginData.data.TryGetValue("outfitDir", out var outfitDirData)) { outfitDirectory = (string)outfitDirData; };
                 if (pluginData.data.TryGetValue("rotation", out var rotationData)) { rotation = (RotationMode)rotationData; };
                 if (pluginData.data.TryGetValue("rotationOrder", out var rotationOrderData)) { rotationOrder = (int)rotationOrderData; }
-                if (pluginData.data.TryGetValue("syncToSlot", out var syncToSlotData)) { syncToSlot = (int)syncToSlotData; }
-                if (pluginData.data.TryGetValue("accessorySuppressions", out var accessorySuppressionsData)) { accessorySuppressions = (List<AccessorySuppressionSlots>)accessorySuppressionsData; }
+                if (pluginData.data.TryGetValue("syncToSlot", out var syncToSlotData)) { syncToSlot = (int)syncToSlotData; }                
+                if (pluginData.data.TryGetValue("accessorySuppressions", out var accessorySuppressionsData)) { accessorySuppressions = new List<AccessorySuppressionSlots>(((object[])accessorySuppressionsData).Cast<AccessorySuppressionSlots>()); }
                 if (pluginData.data.TryGetValue("lastReplacementFile", out var lastReplacementFileData)) { lastReplacementFile = (string)lastReplacementFileData;  }
                 if (!File.Exists(lastReplacementFile))
                     lastReplacementFile = "";
@@ -1104,6 +1104,9 @@ namespace CharacterRandomizer
 
         protected override void OnCardBeingSaved(GameMode currentGameMode)
         {
+#if DEBUG
+            log.LogInfo($"Saving Chara {ChaControl.fileParam.fullname}");            
+#endif
             PluginData pluginData = new PluginData();
 
             pluginData.data = new Dictionary<string, object>();
@@ -1124,7 +1127,7 @@ namespace CharacterRandomizer
             pluginData.data["rotation"] = rotation;
             pluginData.data["rotationOrder"] = rotationOrder;
             pluginData.data["syncToSlot"] = syncToSlot;
-            pluginData.data["accessorySuppressions"] = accessorySuppressions;
+            pluginData.data["accessorySuppressions"] = accessorySuppressions.ToArray();
             pluginData.data["lastReplacementFile"] = lastReplacementFile;
 
 #if DEBUG
