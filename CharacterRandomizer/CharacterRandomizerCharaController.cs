@@ -10,6 +10,7 @@ using Manager;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -106,18 +107,40 @@ namespace CharacterRandomizer
             set { noDupes = value; }
         }
 
-        private string outfitFile;
+        private bool randomOutfit = false;
+        public bool RandomOutfit
+        {
+            get { return randomOutfit; }
+            set { randomOutfit = value; }
+        }
+
+        private string outfitFile = ".*";
         public string OutfitFile
         {
             get { return outfitFile; }
             set { outfitFile = value; }
         }
 
+        private string outfitDirectory = "";
+        public string OutfitDirectory
+        { 
+            get { return outfitDirectory; }
+            set { outfitDirectory = value; }
+        }
+
+
         private bool preserveOutfit = false;
         public bool PreserveOutfit
         {
             get { return preserveOutfit; }
             set { preserveOutfit = value; }
+        }
+
+        private List<AccessorySuppressionSlots> accessorySuppressions = new List<AccessorySuppressionSlots>();
+        public List<AccessorySuppressionSlots> AccessorySuppressions
+        {
+            get { return accessorySuppressions; }
+            set { accessorySuppressions = value; }
         }
 
         private RotationMode rotation = 0;
@@ -132,6 +155,13 @@ namespace CharacterRandomizer
         {
             get { return rotationOrder; }
             set { rotationOrder = value; }
+        }
+
+        private int syncToSlot = -1;
+        public int SyncToSlot
+        {
+            get { return syncToSlot; }
+            set { syncToSlot = value; }
         }
 
         // vars
@@ -161,6 +191,8 @@ namespace CharacterRandomizer
                 else
                     RotationOrder++;
             }
+            if (syncToSlot == -1)
+                syncToSlot = 1;
 #if DEBUG
             log.LogInfo($"Assigning RotationOrder {ChaControl.fileParam.fullname} {RotationOrder}");
 #endif
@@ -237,7 +269,15 @@ namespace CharacterRandomizer
 
         public IEnumerator DoReplaceCharacter(CharacterRandomizerPlugin.ChaFileInfo replacementChaInfo)
         { 
-            if (replacementChaInfo.fileName == null)
+            if (CharReplacementMode == ReplacementMode.SYNC_TO_SLOT)
+            {
+                // wait a frame for the other slots to pick
+                yield return null;
+
+                // pull the character from the other slot
+                replacementChaInfo = new CharacterRandomizerPlugin.ChaFileInfo(ChaControl.sex == 0 ? CharacterRandomizerPlugin.CurrentMaleCharacters[SyncToSlot] : CharacterRandomizerPlugin.CurrentFemaleCharacters[SyncToSlot], "", new DateTime());
+            }
+            else if (replacementChaInfo.fileName == null)
                 replacementChaInfo = PickReplacementCharacter();
 #if DEBUG
             log.LogInfo($"Replacing {RotationOrder}: {ChaControl.fileParam.fullname}\nLast File:{lastReplacementFile}\nPicked Replacement: {replacementChaInfo}");
@@ -251,6 +291,9 @@ namespace CharacterRandomizer
                 ScheduleNextReplacement();
             else
                 StartCoroutine(ScheduleNextReplacementAsync());
+
+            List<AccessoryState> priorAccessoryState = ReadAccessoryState();
+            byte[] priorClothesState = (byte[])ChaControl.fileStatus.clothesState.Clone();
 
             bool success = true;
             int i = 0;
@@ -270,8 +313,16 @@ namespace CharacterRandomizer
                 }
             }
 
+            // Restart Animators to ensure characters are in the best replacement pose possible
+            RestartAnimators();
+
+            // Turn off shoes first - helps Heelz out
+            ChaControl.SetClothesState((int)ChaFileDefine.ClothesKind.shoes, 2);
+            yield return null;
+
             int neckState = ChaControl.neckLookCtrl.ptnNo;
             int gazeState = ChaControl.eyeLookCtrl.ptnNo;
+            float skinGloss = ChaControl.skinGlossRate;
 
             string fileName = "";
             if (preserveOutfit)
@@ -308,25 +359,43 @@ namespace CharacterRandomizer
             {
                 yield return StartCoroutine(DoClothingLoad(fileName));
             }
-            else if (!string.IsNullOrEmpty(outfitFile) && File.Exists(Path.Combine(UserData.Path, "coordinate", (ChaControl.sex == 0 ? "male" : "female"), outfitFile)))
+            else if (randomOutfit)
             {
-                yield return StartCoroutine(DoClothingLoad(outfitFile));
-            }
-            else if (!string.IsNullOrEmpty(OutfitFile))
-            {
-                log.LogWarning($"Specified Replacement Outfit File Not Found: {outfitFile}");
-                log.LogMessage($"Specified Replacement Outfit File Not Found: {outfitFile}");
-            }
+                CharacterRandomizerPlugin.ChaFileInfo coordInfo = PickReplacementOutfit();
+                if (coordInfo.fileName != null)
+                {
+                    yield return StartCoroutine(DoClothingLoad(coordInfo.fileName));
+                }                
+            }            
 
-            yield return StartCoroutine(TickleClothesState());
+            yield return StartCoroutine(TickleClothesState(priorAccessoryState, priorClothesState, preserveOutfit));
             ChaControl.GetOCIChar().ChangeLookNeckPtn(neckState);
             ChaControl.GetOCIChar().ChangeLookEyesPtn(gazeState);
+            ChaControl.GetOCIChar().SetTuyaRate(skinGloss);
 
 #if DEBUG
             log.LogInfo($"Setting Last File {lastReplacementFile}");
 #endif
 
 
+        }     
+        
+        private void RestartAnimators()
+        {
+            Studio.OCIChar[] array = (from v in Singleton<Studio.Studio>.Instance.dicObjectCtrl
+                               where v.Value.kind == 0
+                               select v.Value as Studio.OCIChar).ToArray();
+            for (int i = 0; i < array.Length; i++)
+            {
+                array[i].RestartAnime();
+            }
+            Studio.OCIItem[] array2 = (from v in Singleton<Studio.Studio>.Instance.dicObjectCtrl
+                                where v.Value.kind == 1
+                                select v.Value as Studio.OCIItem).ToArray();
+            for (int j = 0; j < array2.Length; j++)
+            {
+                array2[j].RestartAnime();
+            }
         }
 
         private IEnumerator DoClothingLoad(string fileName)
@@ -345,16 +414,225 @@ namespace CharacterRandomizer
                 File.Delete(Path.Combine(UserData.Path, "coordinate", (ChaControl.sex == 0 ? "male" : "female"), fileName));                
             }
             else
-                ChaControl.GetOCIChar().LoadClothesFile(fileName);
-            yield return StartCoroutine(TickleClothesState());
-
+                ChaControl.GetOCIChar().LoadClothesFile(fileName);           
         }
 
-        private IEnumerator TickleClothesState()
+        private void RestoreAccessoryState(List<AccessoryState> accessoryStates)
+        {
+            foreach (AccessoryState state in accessoryStates)
+            {
+                if (state.characterAccessory)
+                    continue;
+
+                if (state.slotNumber < 20)
+                {
+                    if (ChaControl.nowCoordinate.accessory.parts[state.slotNumber] != null && ChaControl.infoAccessory[state.slotNumber]?.Name != null && ChaControl.infoAccessory[state.slotNumber]?.Name == state.accessoryName)
+                    {
+                        ChaControl.SetAccessoryState(state.slotNumber, state.visible);
+#if DEBUG
+                        log.LogInfo($"Set Accessory ({state.slotNumber}-{state.accessoryName}) to ({state.visible})");
+#endif
+                    }
+                }
+                else
+                {
+                    try
+                    {
+                        if (GetMoreAccessorialPartInfo(state.slotNumber - 20) != null)
+                        {
+                            if (GetMoreAccessorialAccInfo(state.slotNumber - 20)?.Name != null && GetMoreAccessorialAccInfo(state.slotNumber - 20)?.Name == state.accessoryName)
+                            {
+                                ChaControl.SetAccessoryState(state.slotNumber, state.visible);
+#if DEBUG
+                                log.LogInfo($"Set Accessory ({state.slotNumber}-{state.accessoryName}) to ({state.visible})");
+#endif
+                            }
+                        }
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        private void SetStickyAccessorials(List<AccessoryState> accessoryStates)
+        {
+            string[] stickyAccessorials = CharacterRandomizerPlugin.StickyCharacterAccessory.Value.Split('|');
+            if (stickyAccessorials.Length == 0)
+                return;
+
+            Dictionary<string, bool> stickyAccessorialSet = new Dictionary<string, bool>();
+            foreach (string stickyAccessorial in stickyAccessorials)
+            {
+                if (accessoryStates.Any(a => a.accessoryName.ToUpper() == stickyAccessorial.ToUpper()))
+                {
+                    AccessoryState accState = accessoryStates.First(a => a.accessoryName.ToUpper() == stickyAccessorial.ToUpper());
+                    stickyAccessorialSet.Add(accState.accessoryName, accState.visible);
+                }
+            }
+
+            int i = 0;
+            bool success = true;
+            while (success)
+            {
+                try
+                {
+                    if (i < 20)
+                    {
+                        if (ChaControl.nowCoordinate.accessory.parts[i] != null && ChaControl.infoAccessory[i]?.Name != null)
+                        {
+                            foreach (string stickyAccessorial in stickyAccessorialSet.Keys)
+                            {
+                                if (ChaControl.infoAccessory[i].Name.ToUpper().Contains(stickyAccessorial.ToUpper()))
+                                {
+                                    ChaControl.SetAccessoryState(i, stickyAccessorialSet[stickyAccessorial]);
+#if DEBUG
+                                    log.LogInfo($"Set Sticky Accessory ({i}-{stickyAccessorial}) to ({stickyAccessorialSet[stickyAccessorial]})");
+#endif
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        if (GetMoreAccessorialPartInfo(i - 20) != null)
+                        {
+                            if (GetMoreAccessorialAccInfo(i - 20)?.Name != null)
+                            {
+                                foreach (string stickyAccessorial in stickyAccessorialSet.Keys)
+                                {
+                                    if (GetMoreAccessorialAccInfo(i - 20).Name.ToUpper().Contains(stickyAccessorial.ToUpper()))
+                                        ChaControl.SetAccessoryState(i, stickyAccessorialSet[stickyAccessorial]);
+#if DEBUG
+                                    log.LogInfo($"Set Sticky Accessory ({i}-{stickyAccessorial}) to ({stickyAccessorialSet[stickyAccessorial]})");
+#endif
+                                }
+                            }
+                        }
+                        else
+                        {
+                            success = false;
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    success = false;
+                }
+                finally
+                {
+                    i++;
+                }
+            }
+        }
+
+        private List<AccessoryState> ReadAccessoryState()
+        {
+            List<AccessoryState> accessoryStates = new List<AccessoryState>();
+            int i = 0;
+            bool success = true;
+            while (success)
+            {
+                try
+                {
+                    if (i < 20)
+                    {
+                        if (ChaControl.nowCoordinate.accessory.parts[i] != null && ChaControl.infoAccessory[i]?.Name != null)
+                        {
+                            accessoryStates.Add(new AccessoryState(i, ChaControl.infoAccessory[i].Name, ChaControl.fileStatus.showAccessory[i], IsSlotCharacterAccessory(i)));
+                        }
+                    }
+                    else
+                    {
+                        if (GetMoreAccessorialPartInfo(i - 20) != null)
+                        {
+                            if (GetMoreAccessorialAccInfo(i - 20)?.Name != null)
+                            {
+                                accessoryStates.Add(new AccessoryState(i, GetMoreAccessorialAccInfo(i - 20).Name, GetMoreAccessorySlotStatus(i - 20), IsSlotCharacterAccessory(i)));
+                            }
+                        }
+                        else
+                        {
+                            success = false;
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    success = false;
+                }
+                finally
+                {
+                    i++;
+                }
+            }
+#if DEBUG
+            log.LogInfo($"Read Accessory State:\n{string.Join("\n", accessoryStates)}");
+#endif
+            return accessoryStates;
+        }
+
+        private IEnumerator TickleClothesState(List<AccessoryState> priorAccessoryState, byte[] priorClothesState, bool restoreAllAccessories)
         {
             yield return null;
             yield return null;
             ChaControl.GetOCIChar().SetClothesState(0, ChaControl.GetOCIChar().charFileStatus.clothesState[0]);
+            
+            for (int i = 0; i < priorClothesState.Length; i++)
+                ChaControl.GetOCIChar().SetClothesState(i, priorClothesState[i]);
+            
+            if (restoreAllAccessories)
+                RestoreAccessoryState(priorAccessoryState);
+
+            SuppressSelectedAccessorySlots();
+            yield return null;
+            SetStickyAccessorials(priorAccessoryState);
+        }
+
+        private void SuppressSelectedAccessorySlots()
+        {
+            if (AccessorySuppressions.Count == 0)
+                return;
+
+            int i = 0;
+            bool success = true;
+            while (success)
+            {
+                try
+                {
+                    ChaFileAccessory.PartsInfo parts;
+                    if (i < 20)
+                    {
+                        parts = ChaControl.nowCoordinate.accessory.parts[i];
+                    }
+                    else
+                    {
+                        parts = GetMoreAccessorialPartInfo(i - 20);
+                    }
+                    if (parts == null)
+                    {
+                        success = false;
+                    }
+                    else
+                    {
+                        foreach (AccessorySuppressionSlots slot in AccessorySuppressions)
+                        {
+                            foreach (string parentKey in slotParents[slot])
+                            {
+                                if (parts?.parentKey == parentKey)
+                                    ChaControl.SetAccessoryState(i, false);
+                            }
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    success = false;
+                }
+                finally
+                {
+                    i++;
+                }
+            }            
         }
 
         private IEnumerator ScheduleNextReplacementAsync()
@@ -402,6 +680,78 @@ namespace CharacterRandomizer
             }
         }
 
+        private CharacterRandomizerPlugin.ChaFileInfo PickReplacementOutfit()
+        {            
+            try
+            {
+                List<CharacterRandomizerPlugin.ChaFileInfo> files = new List<CharacterRandomizerPlugin.ChaFileInfo>(ChaControl.sex == 1 ? CharacterRandomizerPlugin.FemaleCoordList : CharacterRandomizerPlugin.MaleCoordList);
+#if DEBUG
+                log.LogInfo($"Available Outfits: {files.Count}");
+#endif
+                Dictionary<string, bool> desiredPaths = new Dictionary<string, bool>();
+                foreach (string subdir in outfitDirectory.Split(new char[] { '|' }, StringSplitOptions.None))
+                {
+                    try
+                    {
+                        string matchSubDir = subdir;
+                        bool includeChildrenOfSubdir = false;
+                        if (subdir.EndsWith("*"))
+                        {
+                            includeChildrenOfSubdir = true;
+                            matchSubDir = subdir.TrimEnd(new char[] { '*' });
+                        }
+
+                        string desiredPath = Path.Combine((ChaControl.sex == 1 ? CharacterRandomizerPlugin.FemaleCoordDir : CharacterRandomizerPlugin.MaleCoordDir).FullName, matchSubDir);
+                        log.LogInfo($"Including Replacement Outfits From Directory {desiredPath} {(includeChildrenOfSubdir ? " and child directories" : "")}");
+                        desiredPaths[desiredPath] = includeChildrenOfSubdir;
+                    }
+                    catch (Exception)
+                    {
+                        log.LogWarning($"Ignoring malformed subdirectory {subdir}");
+                    }
+                }
+
+                files = files.FindAll(fi =>
+                {
+                    return desiredPaths.Keys.Where(path =>
+                    {
+                        if (!desiredPaths[path])
+                            return path == Path.GetDirectoryName(fi.fileName);
+                        else
+                            return fi.fileName.StartsWith(path);
+                    }).Count() > 0;
+
+                });
+
+                if (!string.IsNullOrWhiteSpace(outfitFile))
+                {
+                    Regex nameRegex = new Regex(outfitFile, RegexOptions.IgnoreCase);
+                    files = files.FindAll(fi => nameRegex.IsMatch(fi.charaName));
+                    log.LogInfo($"Filtering Replacement Outfits by Pattern {namePattern} Matches: {files.Count}");
+                }
+
+                if (files.Count == 0)
+                {
+                    log.LogWarning($"Cannot Replace Outfit, No Alternatives Available");
+                    log.LogMessage($"Cannot Replace Outfit, No Available Matches");
+                    return new CharacterRandomizerPlugin.ChaFileInfo(null, null, DateTime.Now);
+                }
+
+                CharacterRandomizerPlugin.ChaFileInfo coordFileInfo = files[UnityEngine.Random.Range(0, files.Count - 1)];
+#if DEBUG
+                log.LogInfo($"Picking Outfit: {coordFileInfo.charaName} {coordFileInfo.fileName}");
+#endif
+                return coordFileInfo;
+            }
+            catch (Exception e)
+            {
+#if DEBUG
+                log.LogWarning($"Unable to pick replacement outfit: {e.Message}\n{e.StackTrace}");
+                return new CharacterRandomizerPlugin.ChaFileInfo();
+#endif
+            }
+        }
+
         private CharacterRandomizerPlugin.ChaFileInfo PickReplacementCharacter()
         {
             try
@@ -445,7 +795,7 @@ namespace CharacterRandomizer
 
                 if (!string.IsNullOrWhiteSpace(namePattern))
                 {
-                    Regex nameRegex = new Regex(namePattern);
+                    Regex nameRegex = new Regex(namePattern, RegexOptions.IgnoreCase);
                     files = files.FindAll(fi => nameRegex.IsMatch(fi.charaName));
                     log.LogInfo($"Filtering Replacement Characters by Pattern {namePattern} Matches{(noDupes ? " After Removing Potential Dupes:" : ":")} {files.Count}");
                 }
@@ -711,12 +1061,21 @@ namespace CharacterRandomizer
                 if (pluginData.data.TryGetValue("includeChildDirectories", out var includeChildDirectoriesData)) { includeChildDirectories = (bool)includeChildDirectoriesData; };
                 if (pluginData.data.TryGetValue("useSyncedTime", out var useSyncedTimeData)) { useSyncedTime = (bool)useSyncedTimeData; };
                 if (pluginData.data.TryGetValue("preserveOutfit", out var preserveOutfitData)) { preserveOutfit = (bool)preserveOutfitData; };
+                if (pluginData.data.TryGetValue("randomOutfit", out var randomOutfitData)) { randomOutfit = (bool)randomOutfitData; };
                 if (pluginData.data.TryGetValue("outfitFile", out var outfitFileData)) { outfitFile = (string)outfitFileData; };
+                if (pluginData.data.TryGetValue("outfitDir", out var outfitDirData)) { outfitDirectory = (string)outfitDirData; };
                 if (pluginData.data.TryGetValue("rotation", out var rotationData)) { rotation = (RotationMode)rotationData; };
                 if (pluginData.data.TryGetValue("rotationOrder", out var rotationOrderData)) { rotationOrder = (int)rotationOrderData; }
+                if (pluginData.data.TryGetValue("syncToSlot", out var syncToSlotData)) { syncToSlot = (int)syncToSlotData; }
+                if (pluginData.data.TryGetValue("accessorySuppressions", out var accessorySuppressionsData)) { accessorySuppressions = (List<AccessorySuppressionSlots>)accessorySuppressionsData; }
                 if (pluginData.data.TryGetValue("lastReplacementFile", out var lastReplacementFileData)) { lastReplacementFile = (string)lastReplacementFileData;  }
                 if (!File.Exists(lastReplacementFile))
                     lastReplacementFile = "";
+
+                if (!CharacterRandomizerStudioGUI.IsValidRegex(outfitFile))
+                {
+                    outfitFile = ".*";
+                }
 
                 UpdateCurrentCharacterRegistry(lastReplacementFile);
             }
@@ -735,7 +1094,9 @@ namespace CharacterRandomizer
                 includeChildDirectories = false;
                 useSyncedTime = true;
                 preserveOutfit = false;
-                outfitFile = "";
+                randomOutfit = false;
+                outfitDirectory = "";
+                outfitFile = ".*";
             }
 
             Loaded = true;
@@ -757,9 +1118,13 @@ namespace CharacterRandomizer
             pluginData.data["includeChildDirectories"] = includeChildDirectories;
             pluginData.data["useSyncedTime"] = useSyncedTime;
             pluginData.data["preserveOutfit"] = preserveOutfit;
+            pluginData.data["randomOutfit"] = randomOutfit;
             pluginData.data["outfitFile"] = outfitFile;
+            pluginData.data["outfitDir"] = outfitDirectory;
             pluginData.data["rotation"] = rotation;
             pluginData.data["rotationOrder"] = rotationOrder;
+            pluginData.data["syncToSlot"] = syncToSlot;
+            pluginData.data["accessorySuppressions"] = accessorySuppressions;
             pluginData.data["lastReplacementFile"] = lastReplacementFile;
 
 #if DEBUG
@@ -787,9 +1152,153 @@ namespace CharacterRandomizer
             CYCLIC_NAME_ASC = 3,
             CYCLIC_NAME_DESC = 4,
             CYCLIC_CHARA_NAME_ASC = 5,
-            CYCLIC_CHARA_NAME_DESC = 6
+            CYCLIC_CHARA_NAME_DESC = 6,
+            SYNC_TO_SLOT = 7
         }
 
+        public enum AccessorySuppressionSlots
+        {
+            NECK = 0,
+            WRIST = 1,
+            ANKLE = 2,
+            ARM = 3,
+            LEG = 4,
+            GLASSES = 5,
+            BREASTS = 6,
+            HAT = 7,
+            WAIST = 8
+        }
+        private static readonly ReadOnlyDictionary<AccessorySuppressionSlots, string[]> slotParents = new ReadOnlyDictionary<AccessorySuppressionSlots, string[]>(new Dictionary<AccessorySuppressionSlots, string[]> {
+            { AccessorySuppressionSlots.NECK, new string[] { "N_Neck", "N_Chest_f"} },
+            { AccessorySuppressionSlots.WRIST, new string[] { "N_Wrist_L", "N_Wrist_R" } },
+            { AccessorySuppressionSlots.ANKLE, new string[] { "N_Ankle_L", "N_Ankle_R" } },
+            { AccessorySuppressionSlots.ARM, new string[] { "N_Elbo_L", "N_Arm_L", "N_Elbo_R", "N_Arm_R" } },
+            { AccessorySuppressionSlots.LEG, new string[] { "N_Leg_L","N_Knee_L", "N_Leg_R", "N_Knee_R" } },
+            { AccessorySuppressionSlots.GLASSES, new string[] { "N_Megane" } },
+            { AccessorySuppressionSlots.BREASTS, new string[] {"N_Tikubi_L", "N_Tikubi_R" } },
+            { AccessorySuppressionSlots.HAT, new string[] { "N_Head_top" } },
+            { AccessorySuppressionSlots.WAIST, new string[] {  "N_Waist", "N_Waist_f", "N_Waist_b", "N_Waist_L", "N_Waist_R" } }
+        });
+
         private static MethodInfo chaFileSaveFile = AccessTools.Method(typeof(ChaFile), "SaveFile", new Type[] { typeof(BinaryWriter), typeof(bool), typeof(int)});
+
+
+        // More Accessory Helpers
+        private static Type MoreAccessoriesType = Type.GetType("MoreAccessoriesAI.MoreAccessories, MoreAccessories", false);
+        private static object MoreAccessoriesInstance = BepInEx.Bootstrap.Chainloader.ManagerObject.GetComponent(MoreAccessoriesType);
+        private static FieldInfo additionalDataField = AccessTools.Field(MoreAccessoriesType, "_charAdditionalData");
+        private static FieldInfo partsField = AccessTools.Field(MoreAccessoriesType.GetNestedType("AdditionalData", AccessTools.all), "parts");
+        private static FieldInfo objectsField = AccessTools.Field(MoreAccessoriesType.GetNestedType("AdditionalData", AccessTools.all), "objects");
+        private static FieldInfo showField = AccessTools.Field(MoreAccessoriesType.GetNestedType("AdditionalData", AccessTools.all).GetNestedType("AccessoryObject", AccessTools.all), "show");
+        private static FieldInfo listInfoBaseField = AccessTools.Field(MoreAccessoriesType.GetNestedType("AdditionalData", AccessTools.all).GetNestedType("AccessoryObject", AccessTools.all), "info");
+
+        private bool GetMoreAccessorySlotStatus(int slot)
+        {
+            IDictionary charAdditionalData = (IDictionary)additionalDataField.GetValue(MoreAccessoriesInstance);
+            foreach (DictionaryEntry entry in charAdditionalData)
+            {
+                if (entry.Key.Equals(ChaControl.chaFile))
+                {
+                    IList objectList = (IList)objectsField.GetValue(entry.Value);
+                    if (slot >= objectList.Count)
+                    {
+                        return false;
+                    }
+                    else
+                    {
+                        return (bool)showField.GetValue(objectList[slot]);
+                    }
+                }
+            }
+            return false;
+        }
+
+        private ChaFileAccessory.PartsInfo GetMoreAccessorialPartInfo(int slot)
+        {
+            IDictionary charAdditionalData = (IDictionary)additionalDataField.GetValue(MoreAccessoriesInstance);
+            foreach (DictionaryEntry entry in charAdditionalData)
+            {
+                if (entry.Key.Equals(ChaControl.chaFile))
+                {
+                    List<ChaFileAccessory.PartsInfo> partsList = (List<ChaFileAccessory.PartsInfo>)partsField.GetValue(entry.Value);
+                    if (slot >= partsList.Count)
+                    {
+                        return null;
+                    }
+                    else
+                    {
+                        return partsList[slot];
+                    }
+                }
+            }
+            return null;
+        }
+
+        private ListInfoBase GetMoreAccessorialAccInfo(int slot)
+        {
+            IDictionary charAdditionalData = (IDictionary)additionalDataField.GetValue(MoreAccessoriesInstance);
+            foreach (DictionaryEntry entry in charAdditionalData)
+            {
+                if (entry.Key.Equals(ChaControl.chaFile))
+                {
+                    IList objectList = (IList)objectsField.GetValue(entry.Value);
+                    if (slot >= objectList.Count)
+                    {
+                        return null;
+                    }
+                    else
+                    {
+                        return (ListInfoBase)listInfoBaseField.GetValue(objectList[slot]);
+                    }
+                }
+            }
+            return null;
+        }
+
+        internal struct AccessoryState
+        {
+            internal int slotNumber;
+            internal string accessoryName;
+            internal bool visible;
+            internal bool characterAccessory;
+
+            public AccessoryState(int slotNumber, string accessoryName, bool visible, bool characterAccessory)
+            {
+                this.slotNumber = slotNumber;
+                this.accessoryName = accessoryName;
+                this.visible = visible;
+                this.characterAccessory = characterAccessory;
+            }
+
+            public override string ToString()
+            {
+                return $"({slotNumber}-{visible} {(characterAccessory ? "C":"")}): {accessoryName}";
+            }
+        }
+
+        // Additional Accessory Helpers
+        private static Type AdditionalAccessoryType = AccessTools.TypeByName("AdditionalAccessoryControls.AdditionalAccessoryControlsController");
+        private static Type AdditionalAccessorySlotDataType = AccessTools.TypeByName("AdditionalAccessoryControls.AdditionalAccessorySlotData");
+        private static PropertyInfo AdditionalAccessorySlotDataProperty = AccessTools.Property(AdditionalAccessoryType, "SlotData");
+        private static PropertyInfo AdditionalAccessorySlotDataCharacterAccessoryProperty = AccessTools.Property(AdditionalAccessorySlotDataType, "CharacterAccessory");
+
+        private bool IsSlotCharacterAccessory(int slotNumber)
+        {
+            try
+            {
+                if (AdditionalAccessoryType == null)
+                    return false;
+                else
+                {
+                    var additionalAccessoryController = ChaControl.gameObject.GetComponent(AdditionalAccessoryType);
+                    if (additionalAccessoryController == null)
+                        return false;
+
+                    object[] slotData = (object[])AdditionalAccessorySlotDataProperty.GetValue(additionalAccessoryController);
+                    return (bool)AdditionalAccessorySlotDataCharacterAccessoryProperty.GetValue(slotData[slotNumber]);
+                }
+            }
+            catch { return false; }
+        }
     }
 }

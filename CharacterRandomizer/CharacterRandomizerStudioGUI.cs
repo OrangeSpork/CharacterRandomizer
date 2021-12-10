@@ -15,7 +15,7 @@ namespace CharacterRandomizer
     {
         private static ManualLogSource Log => CharacterRandomizerPlugin.Instance.Log;
 
-        private static Rect windowRect = new Rect(120, 220, 600, 655);
+        private static Rect windowRect = new Rect(120, 75, 600, 800);
         private static readonly GUILayoutOption expandLayoutOption = GUILayout.ExpandWidth(true);
 
         private static GUIStyle labelStyle;
@@ -201,10 +201,79 @@ namespace CharacterRandomizer
 
                     if (!controller.PreserveOutfit)
                     {
-                        GUILayout.Label("Coord File Name to Load - Blank for None (No Path)");
-                        controller.OutfitFile = GUILayout.TextField(controller.OutfitFile, GUILayout.ExpandWidth(true));
-                        GUILayout.Space(3);
+                        controller.RandomOutfit = GUILayout.Toggle(controller.RandomOutfit, " Random Outfit");
+                        if (!controller.RandomOutfit)
+                        {
+                            GUILayout.Label("Will Use Outfit of Replacement Character");
+                            GUILayout.Space(3);
+                        }
+                        else
+                        {
+                            GUILayout.BeginHorizontal();
+                            string coordNamePatternText = controller.OutfitFile;
+                            GUILayout.Label("Coord Name Regexp: ");
+                            coordNamePatternText = GUILayout.TextField(coordNamePatternText, GUILayout.ExpandWidth(true));
+                            if (IsValidRegex(coordNamePatternText))
+                                controller.OutfitFile = coordNamePatternText;
+                            GUILayout.EndHorizontal();
+
+                            GUILayout.Space(2);
+                
+                            GUILayout.Label("Coord Subdir (blank for default, | delimited, * to include children): ");
+                            controller.OutfitDirectory = GUILayout.TextField(controller.OutfitDirectory, GUILayout.ExpandWidth(true));
+
+                            GUILayout.Space(3);
+                        }
                     }
+
+                    GUILayout.BeginVertical();
+                    GUILayout.Label("Suppress Accessories in Attachment Areas (use to suppress accessories that collide with scene items):");
+                    GUILayout.BeginHorizontal();
+                    {
+                        bool neck = controller.AccessorySuppressions.Contains(CharacterRandomizerCharaController.AccessorySuppressionSlots.NECK);
+                        bool wrist = controller.AccessorySuppressions.Contains(CharacterRandomizerCharaController.AccessorySuppressionSlots.WRIST);
+                        bool arm = controller.AccessorySuppressions.Contains(CharacterRandomizerCharaController.AccessorySuppressionSlots.ARM);
+                        bool ankle = controller.AccessorySuppressions.Contains(CharacterRandomizerCharaController.AccessorySuppressionSlots.ANKLE);
+                        bool leg = controller.AccessorySuppressions.Contains(CharacterRandomizerCharaController.AccessorySuppressionSlots.LEG);
+                        bool glasses = controller.AccessorySuppressions.Contains(CharacterRandomizerCharaController.AccessorySuppressionSlots.GLASSES);
+                        bool breasts = controller.AccessorySuppressions.Contains(CharacterRandomizerCharaController.AccessorySuppressionSlots.BREASTS);
+                        bool hat = controller.AccessorySuppressions.Contains(CharacterRandomizerCharaController.AccessorySuppressionSlots.HAT);
+                        bool waist = controller.AccessorySuppressions.Contains(CharacterRandomizerCharaController.AccessorySuppressionSlots.WAIST);
+
+                        neck = GUILayout.Toggle(neck, " Neck"); GUILayout.Space(2);
+                        wrist = GUILayout.Toggle(wrist, " Wrist"); GUILayout.Space(2);
+                        arm = GUILayout.Toggle(arm, " Arm"); GUILayout.Space(2);
+                        ankle = GUILayout.Toggle(ankle, " Ankle"); GUILayout.Space(2);
+                        leg = GUILayout.Toggle(leg, " Leg"); GUILayout.Space(2);
+                        glasses = GUILayout.Toggle(glasses, " Glasses"); GUILayout.Space(2);
+                        breasts = GUILayout.Toggle(breasts, " Breasts"); GUILayout.Space(2);
+                        hat = GUILayout.Toggle(hat, " Hat"); GUILayout.Space(2);
+                        waist = GUILayout.Toggle(waist, " Waist"); GUILayout.Space(2);
+
+                        controller.AccessorySuppressions.Clear();
+                        if (neck)
+                            controller.AccessorySuppressions.Add(CharacterRandomizerCharaController.AccessorySuppressionSlots.NECK);
+                        if (wrist)
+                            controller.AccessorySuppressions.Add(CharacterRandomizerCharaController.AccessorySuppressionSlots.WRIST);
+                        if (arm)
+                            controller.AccessorySuppressions.Add(CharacterRandomizerCharaController.AccessorySuppressionSlots.ARM);
+                        if (ankle)
+                            controller.AccessorySuppressions.Add(CharacterRandomizerCharaController.AccessorySuppressionSlots.ANKLE);
+                        if (leg)
+                            controller.AccessorySuppressions.Add(CharacterRandomizerCharaController.AccessorySuppressionSlots.LEG);
+                        if (glasses)
+                            controller.AccessorySuppressions.Add(CharacterRandomizerCharaController.AccessorySuppressionSlots.GLASSES);
+                        if (breasts)
+                            controller.AccessorySuppressions.Add(CharacterRandomizerCharaController.AccessorySuppressionSlots.BREASTS);
+                        if (hat)
+                            controller.AccessorySuppressions.Add(CharacterRandomizerCharaController.AccessorySuppressionSlots.HAT);
+                        if (waist)
+                            controller.AccessorySuppressions.Add(CharacterRandomizerCharaController.AccessorySuppressionSlots.WAIST);
+                    }
+                    GUILayout.EndHorizontal();
+                    GUILayout.EndVertical();
+
+                    GUILayout.Space(3);
 
                     controller.NoDupes = GUILayout.Toggle(controller.NoDupes, "  No Duplicate Characters in Scene");
                     GUILayout.Space(3);
@@ -240,13 +309,37 @@ namespace CharacterRandomizer
                     GUILayout.Label("Random is random, Cyclic cycles characters in the specified order.");
                     GUILayout.Label("Rotation swaps slot 1. Next cycle swaps 1 to 2 and replaces 1 again, etc. Or from last slot forward.");
                     GUILayout.Space(3);
-                    controller.CharReplacementMode = (CharacterRandomizerCharaController.ReplacementMode)GUILayout.SelectionGrid((int)controller.CharReplacementMode, new string[] { "Random", "Cyclic - Last Update", "Cyclic - Last Update Desc", "Cyclic - File Name", "Cyclic - File Name Desc", "Cyclic - Chara Name", "Cyclic - Chara Name Desc" }, 3);
+                    controller.CharReplacementMode = (CharacterRandomizerCharaController.ReplacementMode)GUILayout.SelectionGrid((int)controller.CharReplacementMode, new string[] { "Random", "Cyclic - Last Update", "Cyclic - Last Update Desc", "Cyclic - File Name", "Cyclic - File Name Desc", "Cyclic - Chara Name", "Cyclic - Chara Name Desc", "Sync to Slot" }, 3);
                     GUILayout.Space(3);
                     CharacterRandomizerCharaController.RotationMode newRotation = (CharacterRandomizerCharaController.RotationMode)GUILayout.SelectionGrid((int)controller.Rotation, new string[] { "None", "Forward", "Reverse", "Wrap Fwd", "Wrap Rev" }, 5);
                     if (newRotation != controller.Rotation)
                     {
                         controller.Rotation = newRotation;
                         PropagateSyncTiming();
+                    }
+                    if (controller.CharReplacementMode == CharacterRandomizerCharaController.ReplacementMode.SYNC_TO_SLOT)
+                    {
+                        GUILayout.Space(3);
+                        GUILayout.BeginHorizontal();
+                        GUILayout.Label($"Sync To Slot (Use Same Character as Rotation Order): {controller.SyncToSlot}");
+                        GUILayout.Space(3);
+                        if (controller.SyncToSlot != CharacterApi.GetRegisteredBehaviour(CharacterRandomizerPlugin.GUID).Instances.Where(cont => cont.ChaControl.sex == controller.ChaControl.sex).Count())
+                        {
+                            if (GUILayout.Button("+"))
+                            {
+                                controller.SyncToSlot++;
+                            };
+                            GUILayout.Space(3);
+                        }
+                        if (controller.SyncToSlot != 1)
+                        {
+                            if (GUILayout.Button("-"))
+                            {
+                                controller.SyncToSlot--;
+                            };
+                        }
+                        GUILayout.FlexibleSpace();
+                        GUILayout.EndHorizontal();
                     }
                     GUILayout.Space(3);
                     GUILayout.BeginHorizontal();
@@ -351,7 +444,7 @@ namespace CharacterRandomizer
             GUI.DragWindow();
         }
 
-        private static bool IsValidRegex(string pattern)
+        public static bool IsValidRegex(string pattern)
         {
             if (string.IsNullOrWhiteSpace(pattern)) return false;
             try

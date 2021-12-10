@@ -29,7 +29,7 @@ namespace CharacterRandomizer
 
         public const string GUID = "orange.spork.characterrandomizer";
         public const string PluginName = "Character Randomizer";
-        public const string Version = "1.1.6";
+        public const string Version = "1.1.7";
 
         public static CharacterRandomizerPlugin Instance { get; set; }
 
@@ -41,13 +41,20 @@ namespace CharacterRandomizer
         public static ConfigEntry<int> MinimumDelay { get; set; }
         public static ConfigEntry<KeyboardShortcut> ReplaceKey { get; set; }
         public static ConfigEntry<string> DefaultSubdirectory { get; set; }        
+        public static ConfigEntry<string> StickyCharacterAccessory { get; set; }
 
         // vars
         internal static DirectoryInfo FemaleBaseDir = new DirectoryInfo(UserData.Path + "chara/female");
         internal static DirectoryInfo MaleBaseDir = new DirectoryInfo(UserData.Path + "chara/male");
 
+        internal static DirectoryInfo FemaleCoordDir = new DirectoryInfo(UserData.Path + "coordinate/female");
+        internal static DirectoryInfo MaleCoordDir = new DirectoryInfo(UserData.Path + "coordinate/male");
+
         public static List<ChaFileInfo> FemaleCharaList { get; set; }
         public static List<ChaFileInfo> MaleCharaList { get; set; }
+
+        public static List<ChaFileInfo> FemaleCoordList { get; set; }
+        public static List<ChaFileInfo> MaleCoordList { get; set; }
 
         public static Dictionary<int, string> CurrentFemaleCharacters { get; set; } = new Dictionary<int, string>();
         public static Dictionary<int, string> RotatedFemaleCharacters { get; set; } = new Dictionary<int, string>();
@@ -55,6 +62,7 @@ namespace CharacterRandomizer
         public static Dictionary<int, string> RotatedMaleCharacters { get; set; } = new Dictionary<int, string>();
 
         private static MethodInfo loadFileMethod = AccessTools.Method(typeof(ChaFile), "LoadFile", new Type[] { typeof(string), typeof(int), typeof(bool), typeof(bool) });
+        private static MethodInfo coordLoadFileMethod = AccessTools.Method(typeof(ChaFileCoordinate), "LoadFile", new Type[] { typeof(Stream), typeof(int) });
 
         public static float LastReplacementTime { get; set; }
         public static float NextReplacementTime { get; set; } = 0f;
@@ -76,6 +84,7 @@ namespace CharacterRandomizer
             MinimumDelay = Config.Bind("Options", "Minimum Replacement Delay", 10, "Minimum Floor for Replacements, To Keep People from Soft-Locking, adjust at your peril.");
             DefaultSubdirectory = Config.Bind("Options", "Default Subdirectory", "", "Default subdirectory to pull replacement characters from. Default to blank (usual male/female card directory)");
             ReplaceKey = Config.Bind("Hotkeys", "Trigger Character Replacement", new KeyboardShortcut(KeyCode.None), new ConfigDescription("Triggers Character Replacement Manually Using Current Options."));
+            StickyCharacterAccessory = Config.Bind("Options", "Always Sticky Character Accessories", "", "Pipe delimited list of character accessory names to make sticky across character replacement always.");
 
             var harmony = new Harmony(GUID);
 
@@ -326,6 +335,8 @@ namespace CharacterRandomizer
         {
             FemaleCharaList = RetrieveCharaLists(true);
             MaleCharaList = RetrieveCharaLists(false);
+            FemaleCoordList = RetrieveCoordLists(true);
+            MaleCoordList = RetrieveCoordLists(false);
         }
 
         public List<ChaFileInfo> RetrieveCharaLists(bool female)
@@ -354,12 +365,54 @@ namespace CharacterRandomizer
                 catch (Exception e)
                 {
 #if DEBUG
-                    Log.LogInfo($"Couldn't Load Card {e.Message}");
+                    Log.LogInfo($"Couldn't Load Card {file} {e.Message}");
 #endif
                 }            
             });
             ExtensibleSaveFormat.ExtendedSave.LoadEventsEnabled = true;
             return chaList;
+        }
+
+        public List<ChaFileInfo> RetrieveCoordLists(bool female)
+        {
+            DirectoryInfo directory = female ? FemaleCoordDir : MaleCoordDir;
+#if DEBUG
+            Log.LogInfo($"Scanning Coord Directory: {directory} Load Invoker: {coordLoadFileMethod} Lang: {0}");
+#endif
+            FileInfo[] fileNames = directory.GetFiles("*.png", SearchOption.AllDirectories);
+
+            ExtensibleSaveFormat.ExtendedSave.LoadEventsEnabled = false;
+
+            List<ChaFileInfo> coordList = new List<ChaFileInfo>();
+            Array.ForEach(fileNames, file =>
+            {
+                FileStream fs = null;
+                try
+                {
+                    ChaFileCoordinate chaFileCoordinate = new ChaFileCoordinate();
+                    fs = new FileStream(file.FullName, FileMode.Open, FileAccess.Read);
+                    bool success = (bool)coordLoadFileMethod.Invoke(chaFileCoordinate, new object[] { fs, 0});
+                    if (success)
+                    {
+                        ChaFileInfo coordInfo = new ChaFileInfo(file.FullName, chaFileCoordinate?.coordinateName, file.LastWriteTime);
+                        coordList.Add(coordInfo);
+                    }
+                }
+                catch (Exception e)
+                {
+#if DEBUG
+                    Log.LogInfo($"Couldn't Load Card {file} {e.Message}");
+#endif
+                }
+                finally
+                {
+                    if (fs != null)
+                        fs.Dispose();
+                }
+            });
+
+            ExtensibleSaveFormat.ExtendedSave.LoadEventsEnabled = true;
+            return coordList;
         }
 
         public static void LogCurrentCharacterRegistry()
