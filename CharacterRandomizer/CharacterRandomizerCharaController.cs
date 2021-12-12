@@ -737,7 +737,7 @@ namespace CharacterRandomizer
                     return new CharacterRandomizerPlugin.ChaFileInfo(null, null, DateTime.Now);
                 }
 
-                CharacterRandomizerPlugin.ChaFileInfo coordFileInfo = files[UnityEngine.Random.Range(0, files.Count - 1)];
+                CharacterRandomizerPlugin.ChaFileInfo coordFileInfo = files[UnityEngine.Random.Range(0, files.Count)];
 #if DEBUG
                 log.LogInfo($"Picking Outfit: {coordFileInfo.charaName} {coordFileInfo.fileName}");
 #endif
@@ -809,7 +809,7 @@ namespace CharacterRandomizer
 
                 if (charReplacementMode == ReplacementMode.RANDOM)
                 {
-                    CharacterRandomizerPlugin.ChaFileInfo replacement = files[UnityEngine.Random.Range(0, files.Count - 1)];
+                    CharacterRandomizerPlugin.ChaFileInfo replacement = files[UnityEngine.Random.Range(0, files.Count)];
 
                     if (!string.IsNullOrWhiteSpace(lastReplacementFile) && Path.GetFullPath(replacement.fileName) == Path.GetFullPath(lastReplacementFile) && files.Count == 1)
                     {
@@ -838,7 +838,7 @@ namespace CharacterRandomizer
                     }
                     else
                     {
-                        CharacterRandomizerPlugin.ChaFileInfo pickedFile = files[UnityEngine.Random.Range(0, files.Count - 1)];
+                        CharacterRandomizerPlugin.ChaFileInfo pickedFile = files[UnityEngine.Random.Range(0, files.Count)];
                         replacement = new CharacterRandomizerPlugin.ChaFileInfo(pickedFile.fileName, pickedFile.charaName, pickedFile.lastUpdated);
                         return replacement;
                     }
