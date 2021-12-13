@@ -747,8 +747,8 @@ namespace CharacterRandomizer
             {
 #if DEBUG
                 log.LogWarning($"Unable to pick replacement outfit: {e.Message}\n{e.StackTrace}");
-                return new CharacterRandomizerPlugin.ChaFileInfo();
 #endif
+                return new CharacterRandomizerPlugin.ChaFileInfo();
             }
         }
 
